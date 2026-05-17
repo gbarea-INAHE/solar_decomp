@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /mnt/c/Repositorios/solar_decomp -maxdepth 4 | sort)",
+      "Bash(python test_pipeline.py)",
+      "PowerShell(cd C:\\\\Repositorios\\\\solar_decomp; $env:PYTHONIOENCODING=\"utf-8\"; python test_pipeline.py 2>&1)",
+      "PowerShell(python -c \"import pandas as pd; print\\(pd.__version__\\)\")"
+    ]
+  }
+}

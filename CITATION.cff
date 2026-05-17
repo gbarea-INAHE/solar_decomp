@@ -1,0 +1,67 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "Solar Decomp: GHI to DNI+DHI solar irradiance decomposition"
+abstract: >
+  Solar Decomp is an open-source web application for decomposing global
+  horizontal irradiance (GHI) into direct normal irradiance (DNI) and
+  diffuse horizontal irradiance (DHI) using the DIRINT (Perez et al., 1992)
+  and Erbs (Erbs et al., 1982) models. It supports 1-min, 15-min and
+  60-min time-series data, includes a physical quality-control system,
+  and exports results in CSV, Excel and JSON formats.
+authors:
+  - family-names: Barea
+    given-names: Gustavo
+    orcid: "https://orcid.org/0000-0002-5643-3206"
+    affiliation: "Instituto de Ambiente, Hábitat y Energía (INAHE) — CONICET, Argentina"
+repository-code: "https://github.com/gbarea-INAHE/solar_decomp"
+license: MIT
+version: "1.0.0"
+date-released: "2025-05-17"
+keywords:
+  - solar irradiance
+  - GHI decomposition
+  - DNI
+  - DHI
+  - DIRINT
+  - Erbs model
+  - solar energy
+  - building energy simulation
+  - climate data
+references:
+  - type: article
+    title: "Modeling daylight availability and irradiance components from direct and global irradiance"
+    authors:
+      - family-names: Perez
+        given-names: R.
+      - family-names: Ineichen
+        given-names: P.
+      - family-names: Maxwell
+        given-names: E.
+      - family-names: Seals
+        given-names: R.
+      - family-names: Zelenka
+        given-names: A.
+    journal: "Solar Energy"
+    volume: 44
+    issue: 5
+    start: 271
+    end: 289
+    year: 1990
+    doi: "10.1016/0038-092X(90)90055-H"
+  - type: article
+    title: "Estimation of the diffuse radiation fraction for hourly, daily and monthly-average global radiation"
+    authors:
+      - family-names: Erbs
+        given-names: D.G.
+      - family-names: Klein
+        given-names: S.A.
+      - family-names: Duffie
+        given-names: J.A.
+    journal: "Solar Energy"
+    volume: 28
+    issue: 4
+    start: 293
+    end: 302
+    year: 1982
+    doi: "10.1016/0038-092X(82)90302-4"

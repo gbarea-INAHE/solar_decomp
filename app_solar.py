@@ -3,7 +3,7 @@ app_solar.py — Streamlit UI para descomposición GHI → DNI + DHI.
 
 Flujo:
   Sidebar : carga de archivo → configuración de sitio → parámetros → ejecutar
-  Panel   : métricas resumen → gráficos → comparación DIRINT vs Erbs → exportar
+  Panel   : métricas resumen → gráficos → comparación de modelos → exportar
 
 Ejecutar:
   streamlit run app_solar.py
@@ -13,6 +13,7 @@ from __future__ import annotations
 import io
 import math
 import traceback
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -32,6 +33,42 @@ from reporter import (
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Constantes de autoría y citación
+# ─────────────────────────────────────────────────────────────────────────────
+_DOI     = "10.5281/zenodo.20262707"
+_DOI_URL = f"https://doi.org/{_DOI}"
+
+_APA_CITATION = (
+    "Barea, G., & Ganem, C. (2025). *Solar Decomp: GHI to DNI+DHI solar irradiance "
+    f"decomposition* [Software]. INAHE-CONICET. Zenodo. {_DOI_URL}"
+)
+
+_BIBTEX_CITATION = f"""@software{{barea_ganem_2025_solar_decomp,
+  author    = {{Barea, Gustavo and Ganem, Carolina}},
+  title     = {{Solar Decomp: GHI to DNI+DHI solar irradiance decomposition}},
+  year      = {{2025}},
+  publisher = {{Zenodo}},
+  doi       = {{{_DOI}}},
+  url       = {{{_DOI_URL}}}
+}}"""
+
+_DISCLAIMER = (
+    "Esta herramienta se encuentra en desarrollo y validación continua. "
+    "Los resultados deben interpretarse como apoyo técnico-científico y no reemplazan "
+    "la evaluación profesional específica de cada caso. Los autores y las instituciones "
+    "asociadas (INAHE-CONICET) no asumen responsabilidad por decisiones técnicas, "
+    "económicas o normativas tomadas exclusivamente a partir de los resultados generados. "
+    "El usuario es responsable de verificar la calidad de los datos cargados e interpretar "
+    "los resultados en su contexto específico."
+)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Logo INAHE
+# ─────────────────────────────────────────────────────────────────────────────
+_ROOT = Path(__file__).resolve().parent
+_LOGO_PATH = _ROOT / "assets" / "inahe_logo.jpg"
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Configuración de página
 # ─────────────────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -40,6 +77,26 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Encabezado principal
+# ─────────────────────────────────────────────────────────────────────────────
+_logo_col, _title_col = st.columns([1, 5])
+with _logo_col:
+    if _LOGO_PATH.is_file():
+        st.image(str(_LOGO_PATH), width=150)
+with _title_col:
+    st.title("Solar Decomp — GHI → DNI + DHI")
+    st.markdown(
+        "**Autores:** Dr. Arq. Gustavo Barea Paci &nbsp;·&nbsp; Dra. Arq. Carolina Ganem &nbsp;|&nbsp; "
+        "**Institución:** INAHE · CONICET"
+    )
+    st.caption(
+        "Modelos: DIRINT (Perez et al., 1992) · Erbs (Erbs et al., 1982) · Reindl-2 (Reindl et al., 1990) "
+        "| Geometría solar: algoritmo Yallop | Resoluciones: 1-min · 15-min · 60-min"
+    )
+
+st.divider()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Estado de sesión
@@ -189,7 +246,7 @@ def fig_quality_score(df: pd.DataFrame) -> go.Figure:
 
 with st.sidebar:
     st.title("☀️ Solar Decomp")
-    st.caption("GHI → DNI + DHI | DIRINT + Erbs")
+    st.caption("GHI → DNI + DHI | DIRINT · Erbs · Reindl-2")
     st.divider()
 
     # ── 0. Plantilla descargable ──────────────────────────────────────────────
@@ -236,37 +293,61 @@ with st.sidebar:
                 st.error(f"Error al cargar: {e}")
                 st.session_state.loaded = None
 
-    if st.button("🔄 Resetear todo", use_container_width=True):
+    if st.button("Resetear todo", use_container_width=True):
         for k in ["loaded", "df_hourly", "df_result", "report", "site_info"]:
             st.session_state[k] = None
         st.rerun()
 
     # ── 2. Información del sitio ──────────────────────────────────────────────
     st.subheader("2 · Sitio")
-    lat  = st.number_input("Latitud [°N]",      value=-34.6,  min_value=-90.0, max_value=90.0,  step=0.01, format="%.4f")
-    lon  = st.number_input("Longitud [°E]",      value=-58.4,  min_value=-180.0, max_value=180.0, step=0.01, format="%.4f")
-    tz   = st.number_input("Zona horaria [UTC+]", value=-3.0,  min_value=-12.0, max_value=14.0,  step=0.5,  format="%.1f")
+    lat = st.number_input("Latitud [°N]",        value=-34.6,  min_value=-90.0,  max_value=90.0,  step=0.01, format="%.4f")
+    lon = st.number_input("Longitud [°E]",        value=-58.4,  min_value=-180.0, max_value=180.0, step=0.01, format="%.4f")
+    alt = st.number_input("Altitud [m s.n.m.]",   value=25.0,   min_value=0.0,    max_value=5000.0, step=10.0, format="%.0f",
+                          help="Usada para estimar presión atmosférica cuando no hay datos medidos.")
+    tz  = st.number_input("Zona horaria [UTC+]",  value=-3.0,   min_value=-12.0,  max_value=14.0,  step=0.5,  format="%.1f")
 
     # ── 3. Parámetros del modelo ──────────────────────────────────────────────
     st.subheader("3 · Modelo")
     primary_model = st.selectbox(
         "Modelo primario",
-        options=["DIRINT", "Erbs"],
+        options=["DIRINT", "Erbs", "Reindl-2"],
         index=0,
-        help="DIRINT (Perez 1992): recomendado para alta resolución y sitios con variabilidad. "
-             "Erbs (1982): más robusto con datos escasos, sin agua precipitable.",
+        help=(
+            "DIRINT (Perez 1992): tabla 3D [W×ΔKt'×Kt'], recomendado para alta resolución. "
+            "Erbs (1982): polinomio Kd(Kt), robusto con datos escasos. "
+            "Reindl-2 (1990): incorpora elevación solar sin(α)."
+        ),
     )
     st.caption(
-        "**DIRINT**: lookup 3D [W×ΔKt'×Kt'], considera variabilidad y vapor de agua. "
-        "**Erbs**: polinomio piecewise Kd(Kt), robusto pero menos preciso en ciclos claros.",
-        unsafe_allow_html=False,
+        "**DIRINT**: mejor ajuste en climas variables. "
+        "**Erbs**: baseline simple y robusto. "
+        "**Reindl-2**: alternativa empírica con elevación solar.",
+    )
+
+    min_cosz = st.slider(
+        "Umbral min cos(Z)",
+        min_value=0.01, max_value=0.20, value=0.08, step=0.01,
+        help=(
+            "Horas con cos(Z) menor a este umbral se descartan. "
+            "Valor sugerido: 0.08 (cenit ~85°). "
+            "Reducir si se pierden muchas horas del amanecer/atardecer."
+        ),
+    )
+
+    preserve_existing = st.checkbox(
+        "No recalcular filas con DNI/DHI existentes",
+        value=True,
+        help=(
+            "Si el archivo ya contiene columnas DNI y/o DHI con datos, "
+            "se conservan esos valores y solo se calculan los faltantes."
+        ),
     )
 
     st.divider()
 
     # ── 4. Ejecutar ───────────────────────────────────────────────────────────
     run_btn = st.button(
-        "▶ Ejecutar descomposición",
+        "Ejecutar descomposicion",
         type="primary",
         use_container_width=True,
         disabled=(st.session_state.loaded is None),
@@ -278,22 +359,43 @@ with st.sidebar:
 
 if run_btn and st.session_state.loaded is not None:
     ld = st.session_state.loaded
-    with st.spinner("Preprocesando y calculando geometría solar…"):
+    with st.spinner("Preprocesando y calculando geometria solar…"):
         try:
-            df_hourly = aggregate_to_hourly(ld, lat_deg=lat, lon_deg=lon, tz_hr=tz)
+            df_hourly = aggregate_to_hourly(
+                ld, lat_deg=lat, lon_deg=lon, tz_hr=tz, altitude_m=alt,
+            )
             st.session_state.df_hourly = df_hourly
         except Exception as e:
             st.error(f"Error en preprocesamiento: {e}")
             st.error(traceback.format_exc())
             st.stop()
 
-    with st.spinner("Ejecutando modelos DIRINT + Erbs…"):
+    with st.spinner("Ejecutando modelos DIRINT + Erbs + Reindl-2…"):
         try:
-            df_dec = run_decomposition(df_hourly, primary=primary_model)
+            df_dec = run_decomposition(df_hourly, primary=primary_model, min_cosz=min_cosz)
         except Exception as e:
-            st.error(f"Error en descomposición: {e}")
+            st.error(f"Error en descomposicion: {e}")
             st.error(traceback.format_exc())
             st.stop()
+
+    # ── Preserve existing DNI/DHI ─────────────────────────────────────────────
+    if preserve_existing and ld.dni_col and ld.dhi_col:
+        try:
+            _grp_dni = ld.df.groupby(ld.df["_timestamp"].dt.floor("h"))[ld.dni_col].mean()
+            _grp_dhi = ld.df.groupby(ld.df["_timestamp"].dt.floor("h"))[ld.dhi_col].mean()
+            _orig_dni = pd.to_numeric(_grp_dni, errors="coerce").reindex(df_dec["timestamp_start"]).values
+            _orig_dhi = pd.to_numeric(_grp_dhi, errors="coerce").reindex(df_dec["timestamp_start"]).values
+            _has_dni  = ~np.isnan(_orig_dni)
+            _has_dhi  = ~np.isnan(_orig_dhi)
+            if _has_dni.any():
+                df_dec.loc[_has_dni, "DNI"]        = _orig_dni[_has_dni]
+                df_dec.loc[_has_dni, "DNI_dirint"]  = _orig_dni[_has_dni]
+                df_dec.loc[_has_dni, "model_primary"] = "original"
+            if _has_dhi.any():
+                df_dec.loc[_has_dhi, "DHI"]        = _orig_dhi[_has_dhi]
+                df_dec.loc[_has_dhi, "DHI_dirint"]  = _orig_dhi[_has_dhi]
+        except Exception:
+            pass  # preserve_existing falla silenciosamente — no bloquea el flujo
 
     with st.spinner("Validando y generando reporte…"):
         try:
@@ -302,15 +404,17 @@ if run_btn and st.session_state.loaded is not None:
                 "filename":   ld.df.attrs.get("filename", "archivo_cargado"),
                 "lat_deg":    lat,
                 "lon_deg":    lon,
+                "alt_m":      alt,
                 "tz_hr":      tz,
                 "resolution": ld.resolution_label,
+                "min_cosz":   min_cosz,
             }
             report  = build_quality_report(df_val, site_info, primary_model)
             st.session_state.df_result  = df_val
             st.session_state.report     = report
             st.session_state.site_info  = site_info
         except Exception as e:
-            st.error(f"Error en validación: {e}")
+            st.error(f"Error en validacion: {e}")
             st.error(traceback.format_exc())
             st.stop()
 
@@ -462,12 +566,13 @@ else:
         st.plotly_chart(fig_model_comparison(df), use_container_width=True)
 
         st.markdown(
-            "**¿Cuándo elegir cada modelo?**\n\n"
-            "- **DIRINT** tiene menor error sistemático en climas con alta variabilidad "
-            "nube/sol y cuando hay datos de temperatura/presión para estimar W.\n"
-            "- **Erbs** es más robusto cuando los datos son escasos o el clima es muy nublado "
-            "(Kt < 0.4 predominante); no requiere vapor de agua.\n"
-            "- La diferencia absoluta entre ambos se muestra en la métrica RMSE arriba."
+            "**Cuando elegir cada modelo:**\n\n"
+            "- **DIRINT**: mejor opcion para datos medidos con variabilidad nube/sol. "
+            "Usa tabla 3D que incorpora vapor de agua y variabilidad horaria de Kt'.\n"
+            "- **Erbs**: baseline simple y robusto. No requiere vapor de agua. "
+            "Recomendado cuando los datos son escasos o el clima es muy nublado (Kt < 0.4).\n"
+            "- **Reindl-2**: alternativa empirica que incorpora elevacion solar sin(alfa). "
+            "Util como segundo punto de comparacion con Erbs."
         )
 
     with tab4:
@@ -532,7 +637,8 @@ else:
     with st.expander("Ver tabla de datos (primeras 96 filas)"):
         preview_cols = [
             "timestamp_start", "GHI_h", "DNI_dirint", "DHI_dirint",
-            "DNI_erbs", "DHI_erbs", "Kt", "zenith_deg", "quality_score",
+            "DNI_erbs", "DHI_erbs", "DNI_reindl2", "DHI_reindl2",
+            "Kt", "zenith_deg", "quality_score",
         ]
         show_cols = [c for c in preview_cols if c in df.columns]
         st.dataframe(
@@ -542,3 +648,18 @@ else:
             ),
             use_container_width=True,
         )
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Secciones fijas al pie (siempre visibles)
+# ─────────────────────────────────────────────────────────────────────────────
+st.divider()
+
+with st.expander("Como citar esta herramienta"):
+    st.markdown("**Formato APA**")
+    st.markdown(_APA_CITATION)
+    st.markdown("**BibTeX**")
+    st.code(_BIBTEX_CITATION, language="bibtex")
+    st.caption(f"DOI: [{_DOI}]({_DOI_URL})")
+
+with st.expander("Aviso de responsabilidad"):
+    st.info(_DISCLAIMER)

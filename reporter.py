@@ -30,6 +30,8 @@ EXPORT_COLS_FULL = [
     "DHI_dirint",
     "DNI_erbs",
     "DHI_erbs",
+    "DNI_reindl2",
+    "DHI_reindl2",
     "DNI",          # modelo primario
     "DHI",          # modelo primario
     "Kt",
@@ -146,50 +148,54 @@ def build_quality_report(
 
 
 def _model_comparison(df_day: pd.DataFrame) -> dict:
-    """Comparativa estadística DIRINT vs Erbs."""
-    if "DNI_dirint" not in df_day.columns or "DNI_erbs" not in df_day.columns:
+    """Comparativa estadística entre los tres modelos (DIRINT, Erbs, Reindl-2)."""
+    required = ["DNI_dirint", "DNI_erbs"]
+    if not all(c in df_day.columns for c in required):
         return {}
-
-    mask = (
-        df_day["DNI_dirint"].notna()
-        & df_day["DNI_erbs"].notna()
-    )
-    if mask.sum() == 0:
-        return {}
-
-    dni_d = df_day.loc[mask, "DNI_dirint"].values
-    dni_e = df_day.loc[mask, "DNI_erbs"].values
-    dhi_d = df_day.loc[mask, "DHI_dirint"].values if "DHI_dirint" in df_day.columns else np.full(len(dni_d), float("nan"))
-    dhi_e = df_day.loc[mask, "DHI_erbs"].values  if "DHI_erbs"  in df_day.columns else np.full(len(dni_e), float("nan"))
 
     def rmse(a, b):
         valid = ~np.isnan(a) & ~np.isnan(b)
-        if valid.sum() == 0:
-            return float("nan")
-        return float(np.sqrt(np.mean((a[valid] - b[valid])**2)))
+        return float(np.sqrt(np.mean((a[valid] - b[valid])**2))) if valid.sum() > 0 else float("nan")
 
     def mbe(a, b):
         valid = ~np.isnan(a) & ~np.isnan(b)
-        if valid.sum() == 0:
-            return float("nan")
-        return float(np.mean(a[valid] - b[valid]))
+        return float(np.mean(a[valid] - b[valid])) if valid.sum() > 0 else float("nan")
 
-    return {
-        "DNI": {
-            "DIRINT_mean": float(np.nanmean(dni_d)),
-            "Erbs_mean":   float(np.nanmean(dni_e)),
-            "RMSE_W_m2":   rmse(dni_d, dni_e),
-            "MBE_W_m2":    mbe(dni_d, dni_e),
-            "diff_pct":    float(100 * (np.nanmean(dni_d) - np.nanmean(dni_e)) / (np.nanmean(dni_e) + 1e-9)),
-        },
-        "DHI": {
-            "DIRINT_mean": float(np.nanmean(dhi_d)),
-            "Erbs_mean":   float(np.nanmean(dhi_e)),
-            "RMSE_W_m2":   rmse(dhi_d, dhi_e),
-            "MBE_W_m2":    mbe(dhi_d, dhi_e),
-            "diff_pct":    float(100 * (np.nanmean(dhi_d) - np.nanmean(dhi_e)) / (np.nanmean(dhi_e) + 1e-9)),
-        },
-    }
+    def stats(col_a, col_b, label_a, label_b):
+        mask = df_day[col_a].notna() & df_day[col_b].notna()
+        if mask.sum() == 0:
+            return {}
+        a = df_day.loc[mask, col_a].values
+        b = df_day.loc[mask, col_b].values
+        return {
+            f"{label_a}_mean": float(np.nanmean(a)),
+            f"{label_b}_mean": float(np.nanmean(b)),
+            "RMSE_W_m2": rmse(a, b),
+            "MBE_W_m2":  mbe(a, b),
+            "diff_pct":  float(100 * (np.nanmean(a) - np.nanmean(b)) / (np.nanmean(b) + 1e-9)),
+        }
+
+    result: dict = {}
+    result["DNI_DIRINT_vs_Erbs"]    = stats("DNI_dirint", "DNI_erbs",    "DIRINT", "Erbs")
+    result["DHI_DIRINT_vs_Erbs"]    = stats("DHI_dirint", "DHI_erbs",    "DIRINT", "Erbs")
+    if "DNI_reindl2" in df_day.columns:
+        result["DNI_DIRINT_vs_Reindl2"] = stats("DNI_dirint", "DNI_reindl2", "DIRINT", "Reindl2")
+        result["DHI_DIRINT_vs_Reindl2"] = stats("DHI_dirint", "DHI_reindl2", "DIRINT", "Reindl2")
+        result["DNI_Erbs_vs_Reindl2"]   = stats("DNI_erbs",   "DNI_reindl2", "Erbs",   "Reindl2")
+        result["DHI_Erbs_vs_Reindl2"]   = stats("DHI_erbs",   "DHI_reindl2", "Erbs",   "Reindl2")
+
+    # Backward-compatible keys for existing UI code
+    if result.get("DNI_DIRINT_vs_Erbs"):
+        s = result["DNI_DIRINT_vs_Erbs"]
+        result["DNI"] = {"DIRINT_mean": s.get("DIRINT_mean"), "Erbs_mean": s.get("Erbs_mean"),
+                         "RMSE_W_m2": s.get("RMSE_W_m2"), "MBE_W_m2": s.get("MBE_W_m2"),
+                         "diff_pct": s.get("diff_pct")}
+    if result.get("DHI_DIRINT_vs_Erbs"):
+        s = result["DHI_DIRINT_vs_Erbs"]
+        result["DHI"] = {"DIRINT_mean": s.get("DIRINT_mean"), "Erbs_mean": s.get("Erbs_mean"),
+                         "RMSE_W_m2": s.get("RMSE_W_m2"), "MBE_W_m2": s.get("MBE_W_m2"),
+                         "diff_pct": s.get("diff_pct")}
+    return result
 
 
 def _monthly_stats(df: pd.DataFrame) -> dict:

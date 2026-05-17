@@ -22,7 +22,7 @@ import pandas as pd
 
 from config import (
     AM_MAX, ZENITH_MAX_DEG, KT_CLOUD_ENH, KT_UNPHYSICAL,
-    DNI_MAX_W_M2, W_DEFAULT_CM,
+    DNI_MAX_W_M2, W_DEFAULT_CM, MIN_COSZ_DEFAULT,
 )
 from solar_geometry import precipitable_water_cm
 
@@ -183,7 +183,7 @@ def dirint_single(
     return dni, dhi, meta
 
 
-def dirint_series(df: pd.DataFrame, w_cm_series: Optional[pd.Series] = None) -> pd.DataFrame:
+def dirint_series(df: pd.DataFrame, w_cm_series: Optional[pd.Series] = None, min_cosz: float = MIN_COSZ_DEFAULT) -> pd.DataFrame:
     """
     Aplica DIRINT a todo el DataFrame horario.
 
@@ -237,7 +237,15 @@ def dirint_series(df: pd.DataFrame, w_cm_series: Optional[pd.Series] = None) -> 
     g0n_arr = df["G0n"].values.astype(float)
     g0h_arr = df["G0h"].values.astype(float)
 
+    cosz_arr = np.where(g0n_arr > 0, g0h_arr / g0n_arr, 0.0)
+
     for i in range(n):
+        if cosz_arr[i] < min_cosz and g0h_arr[i] > 0:
+            dni_out[i] = float("nan")
+            dhi_out[i] = float("nan")
+            flag_out[i] = "invalid"
+            continue
+
         dni, dhi, meta = dirint_single(
             ghi=ghi_arr[i],
             g0n=g0n_arr[i],
@@ -269,6 +277,101 @@ def dirint_series(df: pd.DataFrame, w_cm_series: Optional[pd.Series] = None) -> 
     out["delta_Ktp"]    = dkt_arr
     out["W_cm"]         = w_arr
     out["flag_dirint"]  = flag_out
+    return out
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# REINDL-2 — Reindl et al. 1990
+# ══════════════════════════════════════════════════════════════════════════════
+
+def reindl2_single(
+    ghi: float,
+    kt: float,
+    g0h: float,
+    g0n: float,
+    zenith_deg: float,
+) -> tuple[float, float]:
+    """
+    Modelo Reindl-2 escalar (Reindl et al., 1990).
+
+    Kd = DHI/GHI como función de Kt y sin(α) donde α es la elevación solar:
+      Kt ≤ 0.30       → Kd = 1.020 − 0.254·Kt + 0.0123·sin(α)
+      0.30 < Kt < 0.78 → Kd = 1.400 − 1.749·Kt + 0.177·sin(α)
+      Kt ≥ 0.78       → Kd = 0.486·Kt − 0.182·sin(α)
+    Kd ∈ [0, 1]
+
+    Ref: Reindl D.T. et al. (1990). Solar Energy, 45(1), 1–7.
+    """
+    if g0h <= 0 or math.isnan(ghi) or math.isnan(kt) or math.isnan(zenith_deg):
+        return float("nan"), float("nan")
+
+    ghi = max(0.0, ghi)
+    elev_deg = max(0.0, 90.0 - zenith_deg)
+    sin_alpha = math.sin(math.radians(elev_deg))
+    kt_c = min(max(kt, 0.0), 1.0)
+
+    if kt_c <= 0.30:
+        kd = 1.020 - 0.254 * kt_c + 0.0123 * sin_alpha
+    elif kt_c < 0.78:
+        kd = 1.400 - 1.749 * kt_c + 0.177 * sin_alpha
+    else:
+        kd = 0.486 * kt_c - 0.182 * sin_alpha
+
+    kd = max(0.0, min(kd, 1.0))
+    dhi = max(0.0, kd * ghi)
+
+    cos_z = g0h / g0n if g0n > 0 else 0.0
+    if cos_z <= 0:
+        return float("nan"), float("nan")
+
+    dni = max(0.0, min((ghi - dhi) / cos_z, DNI_MAX_W_M2))
+    dhi = min(dhi, ghi)
+    return dni, dhi
+
+
+def reindl2_series(df: pd.DataFrame, min_cosz: float = MIN_COSZ_DEFAULT) -> pd.DataFrame:
+    """
+    Aplica Reindl-2 a todo el DataFrame horario.
+    Columnas requeridas: GHI_h, Kt, G0h, G0n, zenith_deg.
+    """
+    n = len(df)
+    dni_out  = np.full(n, float("nan"))
+    dhi_out  = np.full(n, float("nan"))
+    flag_out = np.full(n, "invalid", dtype=object)
+
+    ghi_arr    = df["GHI_h"].values.astype(float)
+    kt_arr     = df["Kt"].values.astype(float)
+    g0h_arr    = df["G0h"].values.astype(float)
+    g0n_arr    = df["G0n"].values.astype(float)
+    zenith_arr = df["zenith_deg"].values.astype(float)
+    cosz_arr   = np.where(g0n_arr > 0, g0h_arr / g0n_arr, 0.0)
+
+    for i in range(n):
+        if g0h_arr[i] <= 0 or math.isnan(ghi_arr[i]) or math.isnan(kt_arr[i]):
+            continue
+        if cosz_arr[i] < min_cosz:
+            continue
+
+        dni, dhi = reindl2_single(
+            ghi_arr[i], kt_arr[i], g0h_arr[i], g0n_arr[i], zenith_arr[i]
+        )
+        if math.isnan(dni):
+            continue
+
+        dni_out[i] = dni
+        dhi_out[i] = dhi
+        kt = kt_arr[i]
+        if kt > KT_UNPHYSICAL:
+            flag_out[i] = "Reindl2_unphysical"
+        elif kt > KT_CLOUD_ENH:
+            flag_out[i] = "Reindl2_cloudenh"
+        else:
+            flag_out[i] = "Reindl2"
+
+    out = df.copy()
+    out["DNI_reindl2"] = dni_out
+    out["DHI_reindl2"] = dhi_out
+    out["flag_reindl2"] = flag_out
     return out
 
 
@@ -323,7 +426,7 @@ def erbs_single(ghi: float, kt: float, g0h: float) -> tuple[float, float]:
     return dni_cosz, dhi  # _cosz suffix implícito — ver erbs_series
 
 
-def erbs_series(df: pd.DataFrame) -> pd.DataFrame:
+def erbs_series(df: pd.DataFrame, min_cosz: float = MIN_COSZ_DEFAULT) -> pd.DataFrame:
     """
     Aplica Erbs a todo el DataFrame horario.
     Columnas requeridas: GHI_h, Kt, G0h, G0n (para cos_Z).
@@ -348,7 +451,7 @@ def erbs_series(df: pd.DataFrame) -> pd.DataFrame:
             continue
 
         cos_z = g0h / g0n if g0n > 0 else 0.0
-        if cos_z <= 0:
+        if cos_z <= 0 or cos_z < min_cosz:
             continue
 
         dni_cosz, dhi = erbs_single(ghi, kt, g0h)
@@ -387,44 +490,48 @@ def erbs_series(df: pd.DataFrame) -> pd.DataFrame:
 def run_decomposition(
     df_hourly: pd.DataFrame,
     primary: str = "DIRINT",
+    min_cosz: float = MIN_COSZ_DEFAULT,
 ) -> pd.DataFrame:
     """
-    Ejecuta ambos modelos y selecciona el primario como columnas DNI/DHI.
+    Ejecuta los tres modelos y selecciona el primario como columnas DNI/DHI.
 
     Parámetros
     ----------
     df_hourly : DataFrame de preprocessor.aggregate_to_hourly
-    primary   : "DIRINT" o "Erbs" — modelo que puebla DNI/DHI finales
+    primary   : "DIRINT", "Erbs" o "Reindl-2"
+    min_cosz  : umbral mínimo de cos(Z) para considerar descomposición válida
 
     Retorna
     -------
     DataFrame con columnas DNI, DHI (del modelo primario) más
-    DNI_dirint, DHI_dirint, DNI_erbs, DHI_erbs para comparación.
+    DNI_dirint, DHI_dirint, DNI_erbs, DHI_erbs, DNI_reindl2, DHI_reindl2.
     """
-    # Paso 1: DIRINT
-    df_d = dirint_series(df_hourly)
+    df_d  = dirint_series(df_hourly, min_cosz=min_cosz)
+    df_e  = erbs_series(df_hourly, min_cosz=min_cosz)
+    df_r  = reindl2_series(df_hourly, min_cosz=min_cosz)
 
-    # Paso 2: Erbs (opera sobre df_hourly, no sobre df_d para evitar dependencias)
-    df_e = erbs_series(df_hourly)
-
-    # Paso 3: combinar
     df_out = df_d.copy()
-    df_out["DNI_erbs"]  = df_e["DNI_erbs"]
-    df_out["DHI_erbs"]  = df_e["DHI_erbs"]
-    df_out["flag_erbs"] = df_e["flag_erbs"]
+    df_out["DNI_erbs"]     = df_e["DNI_erbs"]
+    df_out["DHI_erbs"]     = df_e["DHI_erbs"]
+    df_out["flag_erbs"]    = df_e["flag_erbs"]
+    df_out["DNI_reindl2"]  = df_r["DNI_reindl2"]
+    df_out["DHI_reindl2"]  = df_r["DHI_reindl2"]
+    df_out["flag_reindl2"] = df_r["flag_reindl2"]
 
-    # Paso 4: columnas finales según modelo primario
-    if primary.upper() == "DIRINT":
-        df_out["DNI"]      = df_out["DNI_dirint"]
-        df_out["DHI"]      = df_out["DHI_dirint"]
+    p = primary.upper().replace("-", "").replace("_", "").replace("2", "2")
+    if p in ("DIRINT",):
+        df_out["DNI"] = df_out["DNI_dirint"]
+        df_out["DHI"] = df_out["DHI_dirint"]
         df_out["model_primary"] = df_out["flag_dirint"]
-    else:
-        df_out["DNI"]      = df_out["DNI_erbs"]
-        df_out["DHI"]      = df_out["DHI_erbs"]
+    elif p in ("ERBS",):
+        df_out["DNI"] = df_out["DNI_erbs"]
+        df_out["DHI"] = df_out["DHI_erbs"]
         df_out["model_primary"] = df_out["flag_erbs"]
+    else:  # Reindl-2
+        df_out["DNI"] = df_out["DNI_reindl2"]
+        df_out["DHI"] = df_out["DHI_reindl2"]
+        df_out["model_primary"] = df_out["flag_reindl2"]
 
-    # Paso 5: GHI_check — ratio de consistencia (no trivialmente 0)
-    # clearness_ratio = GHI / (DNI·cos_Z + DHI)  → 1.0 si perfecto
     cos_z_arr = df_out["G0h"].values / np.where(df_out["G0n"].values > 0, df_out["G0n"].values, np.nan)
     recon = df_out["DNI"].values * cos_z_arr + df_out["DHI"].values
     with np.errstate(invalid="ignore", divide="ignore"):

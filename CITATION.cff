@@ -14,6 +14,9 @@ authors:
     given-names: Gustavo
     orcid: "https://orcid.org/0000-0002-5643-3206"
     affiliation: "Instituto de Ambiente, Hábitat y Energía (INAHE) — CONICET, Argentina"
+  - family-names: Ganem
+    given-names: Carolina
+    affiliation: "Instituto de Ambiente, Hábitat y Energía (INAHE) — CONICET, Argentina"
 doi: "10.5281/zenodo.20262707"
 repository-code: "https://github.com/gbarea-INAHE/solar_decomp"
 license: MIT

@@ -213,6 +213,14 @@ def air_mass_kasten(zenith_deg: float) -> float:
     return min(AM, AM_MAX)
 
 
+def pressure_from_altitude_kpa(altitude_m: float) -> float:
+    """
+    Presión atmosférica [kPa] estimada desde altitud [m] — atmósfera estándar ISA.
+    Ref: US Standard Atmosphere (1976).
+    """
+    return 101.325 * (1.0 - 2.25577e-5 * altitude_m) ** 5.25588
+
+
 def precipitable_water_cm(temp_C: float, pressure_kPa: float) -> float:
     """
     Estimación de agua precipitable W [cm] a partir de temperatura y presión.

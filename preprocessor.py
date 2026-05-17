@@ -15,14 +15,14 @@ Salida   : pd.DataFrame horario con columnas estandarizadas.
 from __future__ import annotations
 
 import math
-from typing import Optional
+from typing import Optional  # noqa: F401  (usado en firma de aggregate_to_hourly)
 
 import numpy as np
 import pandas as pd
 
 from config import COVERAGE_MIN, HOUR_OFFSET_MIN
 from io_handler import LoadedData
-from solar_geometry import compute_geometry_df, lon_to_360W
+from solar_geometry import compute_geometry_df, lon_to_360W, pressure_from_altitude_kpa
 
 
 # ── Columnas de salida garantizadas ──────────────────────────────────────────
@@ -47,8 +47,9 @@ def aggregate_to_hourly(
     lat_deg: float,
     lon_deg: float,
     tz_hr: float,
+    altitude_m: float = 0.0,
     temp_default_C: float = 20.0,
-    pressure_default_kPa: float = 101.325,
+    pressure_default_kPa: Optional[float] = None,
 ) -> pd.DataFrame:
     """
     Agrega el DataFrame de alta resolución a resolución horaria.
@@ -105,6 +106,9 @@ def aggregate_to_hourly(
     else:
         hourly_base["temp_C"] = temp_default_C
 
+    # Presión por defecto: desde altitud si no se provee valor explícito
+    p_default = pressure_default_kPa if pressure_default_kPa is not None else pressure_from_altitude_kpa(altitude_m)
+
     if ld.pressure_col:
         df["_pres"] = pd.to_numeric(df[ld.pressure_col], errors="coerce")
         # Detectar unidades: si mediana > 200 → Pa, convertir; si > 10 → hPa, convertir
@@ -117,7 +121,7 @@ def aggregate_to_hourly(
         pres_agg.columns = ["timestamp_start", "pressure_kPa"]
         hourly_base = hourly_base.merge(pres_agg, on="timestamp_start", how="left")
     else:
-        hourly_base["pressure_kPa"] = pressure_default_kPa
+        hourly_base["pressure_kPa"] = p_default
 
     # ── 6. timestamp_center = timestamp_start + 30 min ───────────────────────
     hourly_base["timestamp_center"] = (

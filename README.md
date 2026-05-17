@@ -7,7 +7,7 @@
 
 **Solar Decomp** is an open-source web application for decomposing global horizontal irradiance (GHI) time series into direct normal irradiance (DNI) and diffuse horizontal irradiance (DHI), using physically rigorous solar radiation models.
 
-**Developed at** [INAHE-CONICET](https://www.mendoza-conicet.gob.ar/inahe/), Argentina.
+**Authors:** Dr. Arq. Gustavo Barea Paci · Dra. Arq. Carolina Ganem — [INAHE-CONICET](https://www.mendoza-conicet.gob.ar/inahe/), Argentina.
 
 ---
 
@@ -23,9 +23,10 @@ No installation required. Upload your CSV or Excel file and download results imm
 
 ## Features
 
-- **Two decomposition models** running in parallel:
+- **Three decomposition models** running in parallel:
   - **DIRINT** (Perez et al., 1992): 3D lookup table [W × ΔKt' × Kt']; recommended for high-resolution data and variable climates.
   - **Erbs** (Erbs et al., 1982): piecewise polynomial Kd(Kt); robust fallback requiring no precipitable water data.
+  - **Reindl-2** (Reindl et al., 1990): empirical model incorporating solar elevation angle sin(α).
 - **Automatic input detection**: column names (GHI, DNI, DHI, temperature, pressure), timestamp formats, and temporal resolution (1-min, 15-min, 60-min).
 - **Solar geometry engine**: analytical integration of cos(Z) over hourly intervals (Yallop algorithm), air mass (Kasten & Young, 1989), and precipitable water estimation (Leckner, 1978).
 - **Physical quality control**: 10 flag types + quality score (0–100) with configurable penalties.

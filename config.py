@@ -34,6 +34,9 @@ RES_TOLERANCES = {
     3600: (3000, 3900),  # 60-min: mediana ∈ [3000, 3900] s
 }
 
+# ── Umbral mínimo de cos(Z) para descomposición válida ───────────────────────
+MIN_COSZ_DEFAULT = 0.08   # ángulos cenitales > ~85° → resultados inestables
+
 # ── Quality score — penalidades ───────────────────────────────────────────────
 PENALTY = {
     "kt_cloud_enh":    10,

@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-blue.svg)](https://www.python.org/)
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://solar-decomp.streamlit.app)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.XXXXXXX.svg)](https://doi.org/10.5281/zenodo.XXXXXXX)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20262707.svg)](https://doi.org/10.5281/zenodo.20262707)
 
 **Solar Decomp** is an open-source web application for decomposing global horizontal irradiance (GHI) time series into direct normal irradiance (DNI) and diffuse horizontal irradiance (DHI), using physically rigorous solar radiation models.
 
@@ -131,7 +131,7 @@ If you use Solar Decomp in your research, please cite:
   title        = {Solar Decomp: GHI to DNI+DHI solar irradiance decomposition},
   year         = {2025},
   publisher    = {Zenodo},
-  doi          = {10.5281/zenodo.XXXXXXX},
+  doi          = {10.5281/zenodo.20262707},
   url          = {https://github.com/gbarea-INAHE/solar_decomp},
   orcid        = {0000-0002-5643-3206}
 }

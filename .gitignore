@@ -14,3 +14,8 @@ env/
 Thumbs.db
 *.log
 .streamlit/secrets.toml
+.claude/
+run.bat
+run.sh
+generate_test_data.py
+ZENODO_INSTRUCTIONS.md

@@ -90,6 +90,22 @@ def _bin_index(value: float, edges: list[float]) -> int:
     return len(edges) - 2
 
 
+# Centros de los bins Kt' para interpolación lineal (Perez 1992)
+_KTP_CENTERS = np.array([
+    0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.625, 0.675, 0.75, 0.85, 1.0
+])
+
+
+def _kn_interpolated(w_bin: int, dkt_bin: int, ktp: float) -> float:
+    """
+    Interpola Kn linealmente en la dimensión Kt' según Perez (1992).
+    W y ΔKt usan indexación de piso; Kt' usa interpolación entre centros de bin.
+    """
+    ktp_c = min(max(ktp, 0.0), 1.0)
+    kn_row = _KN_TABLE[w_bin, dkt_bin]   # array de 11 valores
+    return float(np.interp(ktp_c, _KTP_CENTERS, kn_row))
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # DIRINT — Perez 1992
 # ══════════════════════════════════════════════════════════════════════════════
@@ -165,8 +181,8 @@ def dirint_single(
     meta["dkt_bin"] = dkt_bin
     meta["ktp_bin"] = ktp_bin
 
-    # ── Lookup Kn ─────────────────────────────────────────────────────────────
-    kn = _KN_TABLE[w_bin, dkt_bin, ktp_bin]
+    # ── Lookup Kn con interpolación lineal en Kt' (Perez 1992) ───────────────
+    kn = _kn_interpolated(w_bin, dkt_bin, ktp_clamped)
     meta["kn"] = kn
 
     # ── Calcular DNI y DHI ────────────────────────────────────────────────────

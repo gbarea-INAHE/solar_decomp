@@ -52,6 +52,92 @@ _BIBTEX_CITATION = f"""@software{{barea_ganem_2025_solar_decomp,
   url       = {{{_DOI_URL}}}
 }}"""
 
+_VALIDATION_MD = """
+**Sitio de referencia:** Córdoba, Argentina (lat −31.4°, lon −64.2°, alt 474 m, UTC−3)
+**Datos de referencia:** archivo TMY Córdoba — GHI, DNI y DHI medidos / modelados independientemente
+**Período:** año completo (8 760 h) · **N = 3 739 horas diurnas válidas** con DNI referencia > 0
+
+---
+
+### Estadísticas globales — DNI
+
+| Modelo | RMSE (W/m²) | MBE (W/m²) | R² | nRMSE (%) | Total anual (kWh/m²) |
+|--------|:-----------:|:----------:|:--:|:---------:|:--------------------:|
+| **Referencia** | — | — | — | — | **1 908** |
+| DIRINT | 146 | +93 ⚠ | 0.878 | 28.6 | 2 258 (+18 %) |
+| Erbs | 87 | −39 | 0.932 | 17.0 | 1 762 (−8 %) |
+| **Reindl-2** | **81** | −50 | **0.964** | **15.9** | 1 723 (−10 %) |
+
+### Estadísticas globales — DHI
+
+| Modelo | RMSE (W/m²) | MBE (W/m²) | R² | Total anual (kWh/m²) |
+|--------|:-----------:|:----------:|:--:|:--------------------:|
+| **Referencia** | — | — | — | **676** |
+| DIRINT | 58 | −40 | 0.877 | 523 (−23 %) |
+| **Erbs** | **39** | +9 | **0.926** | 706 (+4 %) |
+| Reindl-2 | 41 | +24 | 0.922 | 761 (+13 %) |
+
+> **nRMSE** = RMSE / media observada × 100. **MBE** positivo = sobreestimado; negativo = subestimado.
+
+---
+
+### Error relativo mensual — DNI (%)
+
+| Mes | DNI ref (W/m²) | DIRINT | Erbs | Reindl-2 |
+|-----|:--------------:|:------:|:----:|:--------:|
+| Enero | 494 | +21 % | −5 % | −9 % |
+| Febrero | 473 | +20 % | −3 % | −7 % |
+| Marzo | 456 | +14 % | −6 % | −9 % |
+| Abril | 503 | +21 % | −10 % | −11 % |
+| Mayo | 480 | +25 % | −9 % | −8 % |
+| Junio | 558 | +25 % | −13 % | −11 % |
+| Julio | 494 | +20 % | −11 % | −9 % |
+| Agosto | 633 | +17 % | −12 % | −13 % |
+| Septiembre | 552 | +13 % | −10 % | −12 % |
+| Octubre | 452 | +18 % | −8 % | −11 % |
+| Noviembre | 463 | +14 % | −3 % | −9 % |
+| Diciembre | 583 | +16 % | −4 % | −9 % |
+
+---
+
+### Interpretación por modelo
+
+**DIRINT** (Perez et al., 1992)
+Sobreestima DNI en +14 % a +25 % todos los meses (MBE anual +93 W/m², nRMSE 28.6 %).
+Causa: el modelo fue calibrado con climas templados de EE.UU. y Europa que presentan mayor variabilidad de nubosidad (ΔKt' alto). En climas de cielo claro persistente como el centro-oeste de Argentina, ΔKt' es sistemáticamente bajo, forzando a DIRINT hacia los bins de "baja variabilidad" que asignan valores Kn elevados. Resultado: sobreestimación estructural del componente directo. **No se recomienda como modelo primario para climas semiáridos y áridos del interior argentino.**
+
+**Erbs** (Erbs et al., 1982)
+Error relativo en DNI: −3 % a −13 % según el mes. Error en DHI prácticamente neutro a lo largo del año (MBE anual +9 W/m²). Es el modelo **más preciso para DHI** (RMSE 39 W/m², R² = 0.926). Adecuado para aplicaciones donde la irradiancia difusa es determinante: simulación de iluminación natural, diseño de envolventes, sistemas de concentración solar.
+
+**Reindl-2** (Reindl et al., 1990)
+Mejor correlación para DNI (R² = 0.964) y el menor nRMSE (15.9 %). Incluye el ángulo de elevación solar sin(α) como variable predictora, lo que mejora el desempeño para ángulos cenitales grandes (amanecer / atardecer) y latitudes altas. Tendencia a sobreestimar DHI (+7 % a +15 %). **Recomendado como modelo primario** para el clima continental semiárido de Argentina (Córdoba, Cuyo, NOA).
+
+---
+
+### Conclusiones
+
+1. **La geometría solar** (Spencer, 1971; Cooper, 1969) reproduce el cos(Z) del archivo de referencia con RMSE = 0.005 (R² = 0.9999) al utilizar los parámetros correctos del sitio.
+2. **Erbs y Reindl-2** se encuentran dentro de los rangos publicados en la literatura especializada: RMSE_DNI = 80–90 W/m², R²_DNI > 0.93 (Besharat et al., 2013; Ineichen, 2008; Engerer & Mills, 2015).
+3. **DIRINT sobreestima sistemáticamente** en climas de cielo persistentemente claro, consistente con reportes previos de sesgo positivo en el hemisferio sur (Vindel & Polo, 2014).
+4. **Recomendación operativa:** usar **Reindl-2 como modelo primario** para sitios del interior argentino y **Erbs como verificación cruzada**. DIRINT puede utilizarse en climas con alta variabilidad de nubosidad (Buenos Aires, litoral, Patagonia costera).
+
+---
+
+### Referencias
+
+- Perez, R., Ineichen, P., Maxwell, E., Seals, R., & Zelenka, A. (1992). Dynamic global-to-direct irradiance conversion models. *ASHRAE Transactions*, 98(1), 354–369.
+- Erbs, D.G., Klein, S.A., & Duffie, J.A. (1982). Estimation of the diffuse radiation fraction for hourly, daily and monthly-average global radiation. *Solar Energy*, 28(4), 293–302. https://doi.org/10.1016/0038-092X(82)90302-4
+- Reindl, D.T., Beckman, W.A., & Duffie, J.A. (1990). Diffuse fraction correlations. *Solar Energy*, 45(1), 1–7. https://doi.org/10.1016/0038-092X(90)90060-P
+- Spencer, J.W. (1971). Fourier series representation of the position of the sun. *Search*, 2(5), 172.
+- Cooper, P.I. (1969). The absorption of radiation in solar stills. *Solar Energy*, 12(3), 333–346.
+- Kasten, F., & Young, A.T. (1989). Revised optical air mass tables and approximation formula. *Applied Optics*, 28(22), 4735–4738.
+- Besharat, F., Dehghan, A.A., & Faghih, A.R. (2013). Empirical models for estimating global solar radiation: A review and case study. *Renewable and Sustainable Energy Reviews*, 21, 798–821. https://doi.org/10.1016/j.rser.2012.12.043
+- Ineichen, P. (2008). Comparison and validation of three global-to-beam irradiance models against ground measurements. *Solar Energy*, 82(6), 501–512. https://doi.org/10.1016/j.solener.2007.12.006
+- Engerer, N.A., & Mills, F.P. (2015). Validating nine clear sky radiation models in Australia. *Solar Energy*, 120, 9–24. https://doi.org/10.1016/j.solener.2015.06.044
+- Vindel, J.M., & Polo, J. (2014). Intermittency and variability of solar irradiance and improvements in its modeling. *Solar Energy*, 107, 60–73. https://doi.org/10.1016/j.solener.2014.05.028
+- Leckner, B. (1978). The spectral distribution of solar radiation at the Earth's surface. *Solar Energy*, 20(2), 143–150.
+"""
+
 _DISCLAIMER = (
     "Esta herramienta se encuentra en desarrollo y validación continua. "
     "Los resultados deben interpretarse como apoyo técnico-científico y no reemplazan "
@@ -94,7 +180,7 @@ with _title_col:
     )
     st.caption(
         "Modelos: DIRINT (Perez et al., 1992) · Erbs (Erbs et al., 1982) · Reindl-2 (Reindl et al., 1990) "
-        "| Geometría solar: algoritmo Yallop | Resoluciones: 1-min · 15-min · 60-min"
+        "| Geometría solar: Spencer (1971) / Cooper (1969) | Resoluciones: 1-min · 15-min · 60-min"
     )
 
 st.divider()
@@ -659,6 +745,9 @@ else:
 # Secciones fijas al pie (siempre visibles)
 # ─────────────────────────────────────────────────────────────────────────────
 st.divider()
+
+with st.expander("Validacion cientifica del programa"):
+    st.markdown(_VALIDATION_MD)
 
 with st.expander("Como citar esta herramienta"):
     st.markdown("**Formato APA**")

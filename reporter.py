@@ -232,15 +232,52 @@ def export_csv(df_validated: pd.DataFrame, minimal: bool = False) -> bytes:
     return buf.getvalue()
 
 
+_LEGEND_ROWS = [
+    ("timestamp_start",      "—",       "Inicio del intervalo horario"),
+    ("timestamp_center",     "—",       "Centro del intervalo horario (usado en cálculos)"),
+    ("GHI_h",                "W/m²",    "Irradiancia global horizontal promediada al intervalo horario"),
+    ("DNI_dirint",           "W/m²",    "DNI calculado con modelo DIRINT (Perez et al., 1992)"),
+    ("DHI_dirint",           "W/m²",    "DHI calculado con modelo DIRINT"),
+    ("DNI_erbs",             "W/m²",    "DNI calculado con modelo Erbs (Erbs et al., 1982)"),
+    ("DHI_erbs",             "W/m²",    "DHI calculado con modelo Erbs"),
+    ("DNI_reindl2",          "W/m²",    "DNI calculado con modelo Reindl-2 (Reindl et al., 1990)"),
+    ("DHI_reindl2",          "W/m²",    "DHI calculado con modelo Reindl-2"),
+    ("DNI",                  "W/m²",    "DNI columna principal (DIRINT por compatibilidad)"),
+    ("DHI",                  "W/m²",    "DHI columna principal (DIRINT por compatibilidad)"),
+    ("Kt",                   "—",       "Índice de claridad: GHI / G0h (0 = nublado, ~1 = cielo despejado)"),
+    ("Ktp",                  "—",       "Índice de claridad modificado Kt' (corregido por masa de aire)"),
+    ("Kn_dirint",            "—",       "Factor de beam normalizado usado internamente por DIRINT"),
+    ("W_cm",                 "cm",      "Agua precipitable estimada (Leckner, 1978). Usada por DIRINT."),
+    ("cos_Z",                "—",       "Coseno del ángulo cenital solar (promedio analítico del intervalo)"),
+    ("zenith_deg",           "°",       "Ángulo cenital solar en el centro del intervalo"),
+    ("AM",                   "—",       "Masa de aire óptica (Kasten & Young, 1989)"),
+    ("G0n",                  "W/m²",    "Irradiancia extraterrestre normal (sin atmósfera)"),
+    ("G0h",                  "W/m²",    "Irradiancia extraterrestre horizontal = G0n × cos(Z)"),
+    ("coverage",             "fracción","Fracción de registros sub-horarios válidos en el intervalo (0–1)"),
+    ("quality_score",        "0–100",   "Puntaje de calidad del dato horario. 100 = sin flags. Penaliza cada flag según su severidad."),
+    ("flag_kt_cloud_enh",    "bool",    "Kt > 0.9: posible cloud enhancement (sobreestimación transitoria por nube brillante)"),
+    ("flag_kt_unphysical",   "bool",    "Kt > 1.05: valor físicamente imposible, probable error de sensor o calibración"),
+    ("flag_dni_high",        "bool",    "DNI > G0n: supera la irradiancia extraterrestre (imposible físicamente)"),
+    ("flag_dni_unphysical",  "bool",    "DNI > 1000 W/m² con ángulo cenital alto: combinación sospechosa"),
+    ("flag_dni_negative",    "bool",    "DNI < 0: valor negativo (error numérico o de sensor)"),
+    ("flag_dhi_exceeds_ghi", "bool",    "DHI > GHI: la difusa no puede superar la global horizontal"),
+    ("flag_dhi_negative",    "bool",    "DHI < 0: valor negativo (error numérico o de sensor)"),
+    ("flag_night_nonzero",   "bool",    "GHI > 0 cuando el sol está bajo el horizonte (cos Z ≤ 0)"),
+    ("flag_low_coverage",    "bool",    "Menos del 75 % de registros sub-horarios disponibles en el intervalo"),
+    ("flag_invalid_hour",    "bool",    "Hora descartada por múltiples flags críticos simultáneos"),
+]
+
+
 def export_excel(
     df_validated: pd.DataFrame,
     report: dict,
     minimal: bool = False,
 ) -> bytes:
     """
-    Retorna archivo Excel (bytes) con dos hojas:
+    Retorna archivo Excel (bytes) con tres hojas:
       - 'Datos': DataFrame de resultados
-      - 'Reporte': resumen de calidad en formato tabla
+      - 'Reporte_Calidad': resumen de calidad en formato tabla
+      - 'Leyenda': descripción de cada columna y flag
     """
     cols = EXPORT_COLS_MINIMAL if minimal else EXPORT_COLS_FULL
     cols_present = [c for c in cols if c in df_validated.columns]
@@ -249,6 +286,10 @@ def export_excel(
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
         df_validated[cols_present].to_excel(writer, sheet_name="Datos", index=False)
         _report_to_sheet(report, writer, sheet_name="Reporte_Calidad")
+        pd.DataFrame(
+            [(r[0], r[1], r[2]) for r in _LEGEND_ROWS if r[0] in cols_present or not minimal],
+            columns=["Columna", "Unidad", "Descripción"],
+        ).to_excel(writer, sheet_name="Leyenda", index=False)
     return buf.getvalue()
 
 

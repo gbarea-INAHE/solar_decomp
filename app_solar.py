@@ -695,6 +695,14 @@ else:
 
     # ── Exportar ──────────────────────────────────────────────────────────────
     st.subheader("Exportar resultados")
+    with st.expander("Leyenda de columnas y flags de calidad"):
+        from reporter import _LEGEND_ROWS
+        import pandas as _pd_leg
+        st.dataframe(
+            _pd_leg.DataFrame(_LEGEND_ROWS, columns=["Columna", "Unidad", "Descripción"]),
+            use_container_width=True,
+            hide_index=True,
+        )
     col_exp1, col_exp2, col_exp3 = st.columns(3)
 
     with col_exp1:

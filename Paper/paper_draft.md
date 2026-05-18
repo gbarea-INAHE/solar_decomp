@@ -254,9 +254,55 @@ The authors acknowledge [SMN / CONICET / funding agency]. EPW data from the IWEC
 
 ## Supplementary Material
 
-**Table S1.** Full list of 41 study sites with geographic coordinates, altitude, data source, Köppen-Geiger classification, IRAM 11603 thermal zone, and number of valid daytime hours in the validation dataset.
+**Table S1.** Full list of 41 study sites ordered by latitude (North→South).
 
-*(to be generated from validation Excel)*
+| WMO | City | Lat (°S) | Lon (°W) | Elev (m) | TZ (UTC) | Source | Köppen | IRAM | N daytime h |
+|---|---|---|---|---|---|---|---|---|---|
+| 870220 | Tartagal | 22.65 | 63.82 | 450 | −3 | IWEC2 | Aw | I | 4,438 |
+| 870460 | Jujuy | 24.38 | 65.08 | 905 | −3 | IWEC2 | BSh | II | 4,435 |
+| 870470 | Salta | 24.85 | 65.48 | 1,221 | −3 | IWEC2 | BSh | II | 4,406 |
+| 870970 | Iguazú | 25.73 | 54.47 | 270 | −3 | IWEC2 | Cfa | I | 4,395 |
+| 871620 | Formosa | 26.20 | 58.23 | 60 | −3 | IWEC2 | Aw | I | 4,376 |
+| 871490 | Presidencia Roque S. | 26.82 | 60.45 | 92 | −3 | IWEC2 | Cfa | II | 4,367 |
+| 871210 | Tucumán | 26.85 | 65.10 | 450 | −3 | IWEC2 | Cfa | II | 4,408 |
+| 871780 | Posadas | 27.37 | 55.97 | 125 | −3 | IWEC2 | Cfa | I | 4,378 |
+| 871550 | Resistencia | 27.45 | 59.05 | 52 | −3 | IWEC2 | Cfa | I | 4,376 |
+| 871660 | Corrientes | 27.45 | 58.77 | 62 | −3 | IWEC2 | Cfa | I | 4,393 |
+| 999 | Andalgalá | 27.58 | 66.31 | 1,071 | −3 | MN7 | BWk | IV | 4,186 |
+| 871290 | Santiago del Estero | 27.77 | 64.30 | 199 | −3 | IWEC2 | BSk | II | 4,437 |
+| 872220 | Catamarca | 28.60 | 65.77 | 454 | −3 | IWEC2 | BWk | III | 4,443 |
+| 872700 | Reconquista | 29.18 | 59.70 | 53 | −3 | IWEC2 | Cfa | II | 4,352 |
+| 872170 | La Rioja | 29.38 | 66.82 | 429 | −3 | IWEC2 | BWh | III | 4,465 |
+| 872890 | Paso de los Libres | 29.68 | 57.15 | 70 | −3 | IWEC2 | Cfa | I | 4,381 |
+| 873950 | Concordia | 31.30 | 58.02 | 38 | −3 | IWEC2 | Cfa | II | 4,380 |
+| 873440 | Córdoba | 31.32 | 64.22 | 474 | −3 | IWEC2 | BSk | III | 4,412 |
+| 873110 | San Juan | 31.40 | 68.42 | 598 | −3 | IWEC2 | BWk | III | 4,452 |
+| 873710 | Sauce Viejo | 31.70 | 60.82 | 18 | −3 | IWEC2 | Cfa | III | 4,381 |
+| 873740 | Paraná | 31.78 | 60.48 | 78 | −3 | IWEC2 | Cfa | II | 4,372 |
+| 873280 | Villa Dolores | 31.95 | 65.13 | 569 | −3 | IWEC2 | BSk | III | 4,418 |
+| 874180 | Mendoza | 32.83 | 68.78 | 704 | −3 | IWEC2 | BWk | III | 4,428 |
+| 874800 | Rosario | 32.92 | 60.78 | 25 | −3 | IWEC2 | Cfa | III | 4,370 |
+| 874970 | Gualeguaychú | 33.00 | 58.62 | 21 | −3 | IWEC2 | Cfa | II | 4,355 |
+| 874360 | San Luis | 33.27 | 66.35 | 713 | −3 | IWEC2 | BSk | III | 4,403 |
+| 874480 | Villa Reynolds | 33.73 | 65.38 | 486 | −3 | IWEC2 | BSk | III | 4,434 |
+| 875480 | Junín | 34.55 | 60.92 | 81 | −3 | IWEC2 | BSk | III | 4,368 |
+| 875820 | Buenos Aires (Aeroparque) | 34.57 | 58.42 | 6 | −3 | IWEC2 | Cfa | III | 4,335 |
+| 875090 | San Rafael | 34.58 | 68.40 | 748 | −3 | IWEC2 | BWk | IV | 4,424 |
+| 875060 | Malargüe | 35.50 | 69.58 | 1,425 | −3 | IWEC2 | BWk | IV | 4,425 |
+| — | General Pico | 35.70 | 63.75 | 145 | −3 | TMY2 | BSk | III | 4,238 |
+| 876230 | Santa Rosa | 36.57 | 64.27 | 191 | −3 | IWEC2 | BSk | IV | 4,395 |
+| 877150 | Neuquén | 38.95 | 68.13 | 271 | −3 | IWEC2 | BSk | IV | 4,382 |
+| 877910 | Viedma | 40.85 | 63.02 | 7 | −3 | IWEC2 | BSk | IV | 4,357 |
+| 877650 | Bariloche | 41.15 | 71.17 | 840 | −3 | IWEC2 | Cfb | V | 4,387 |
+| 878030 | Esquel | 42.93 | 71.15 | 797 | −3 | IWEC2 | BSk | V | 4,362 |
+| 878280 | Trelew | 43.20 | 65.27 | 43 | −3 | IWEC2 | BWk | V | 4,374 |
+| 878600 | Comodoro Rivadavia | 45.78 | 67.50 | 46 | −3 | IWEC2 | BSk | V | 4,356 |
+| 879250 | Río Gallegos | 51.62 | 69.28 | 19 | −3 | IWEC2 | BSk | VI | 4,338 |
+| 879380 | Ushuaia | 54.80 | 68.32 | 57 | −3 | IWEC2 | ET | VI | 4,304 |
+
+**Total: 41 cities — 179,686 daytime hours (GHI ≥ 10 W/m²)**
+
+Köppen-Geiger classes: Aw = tropical savanna; BSh = hot steppe; BSk = cold steppe; BWh = hot desert; BWk = cold desert; Cfa = humid subtropical; Cfb = oceanic; ET = tundra/polar. IRAM 11603 thermal zones: I (warm) to VI (very cold / high altitude). MN7 = non-IWEC2 local source.
 
 **Figures S1–S3.** Monthly R², RMSE, and MBE time series for all 41 cities × 3 models.
 

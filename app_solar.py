@@ -398,23 +398,25 @@ with st.sidebar:
                           help="Usada para estimar presión atmosférica cuando no hay datos medidos.")
     tz  = st.number_input("Zona horaria [UTC+]",  value=-3.0,   min_value=-12.0,  max_value=14.0,  step=0.5,  format="%.1f")
 
-    # ── 3. Parámetros del modelo ──────────────────────────────────────────────
-    st.subheader("3 · Modelo")
-    primary_model = st.selectbox(
-        "Modelo primario",
-        options=["DIRINT", "Erbs", "Reindl-2"],
-        index=0,
-        help=(
-            "DIRINT (Perez 1992): tabla 3D [W×ΔKt'×Kt'], recomendado para alta resolución. "
-            "Erbs (1982): polinomio Kd(Kt), robusto con datos escasos. "
-            "Reindl-2 (1990): incorpora elevación solar sin(α)."
-        ),
+    # ── 3. Modelos ────────────────────────────────────────────────────────────
+    st.subheader("3 · Modelos")
+    st.info(
+        "El programa calcula los **3 modelos en paralelo**. "
+        "Los resultados de cada uno se exportan en columnas separadas.",
+        icon="ℹ️",
     )
-    st.caption(
-        "**DIRINT**: mejor ajuste en climas variables. "
-        "**Erbs**: baseline simple y robusto. "
-        "**Reindl-2**: alternativa empírica con elevación solar.",
+    st.markdown(
+        "- **Reindl-2** (Reindl et al., 1990): incorpora elevación solar sin(α). "
+        "Recomendado para climas áridos/semiáridos del interior argentino "
+        "(mejor R² = 0.964, nRMSE = 15.9 %).\n"
+        "- **Erbs** (Erbs et al., 1982): polinomio Kd(Kt). "
+        "Más preciso para DHI (RMSE = 39 W/m²). Robusto sin datos de temperatura.\n"
+        "- **DIRINT** (Perez et al., 1992): tabla 3D [W × ΔKt' × Kt']. "
+        "Mejor desempeño en climas variables con alta nubosidad "
+        "(Buenos Aires, litoral, Patagonia costera). "
+        "Tiende a sobreestimar DNI en cielos persistentemente claros."
     )
+    primary_model = "DIRINT"  # se calculan los 3; columnas DNI/DHI usan DIRINT por compatibilidad
 
     min_cosz = st.slider(
         "Umbral min cos(Z)",

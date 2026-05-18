@@ -39,14 +39,14 @@ No installation required. Upload your CSV or Excel file and download results imm
 
 | Column | Required | Description | Example names |
 |--------|----------|-------------|---------------|
-| Timestamp | **Yes** | Date and time (any standard format) | `timestamp`, `datetime`, `fecha`, `date` |
-| GHI [W/m²] | **Yes** | Global horizontal irradiance | `GHI`, `global_horizontal_irradiance`, `swdown` |
-| DNI [W/m²] | No | Direct normal irradiance (reference only) | `DNI`, `direct_normal_irradiance` |
-| DHI [W/m²] | No | Diffuse horizontal irradiance (reference only) | `DHI`, `diffuse_horizontal_irradiance` |
-| Temperature [°C] | No | Dry-bulb air temperature | `temp`, `temp_C`, `t2m` |
-| Pressure [kPa/hPa] | No | Atmospheric pressure | `pressure`, `press_kPa` |
+| Timestamp | **Yes** | Date and time (any standard format) | `timestamp`, `datetime`, `fecha`, `date`, `date_time`, `Date/Time` |
+| GHI [W/m²] | **Yes** | Global horizontal irradiance | `GHI`, `global_horizontal_irradiance`, `global_solar`, `swdown` |
+| DNI [W/m²] | No | Direct normal irradiance (reference only) | `DNI`, `direct_normal_irradiance`, `normal_solar` |
+| DHI [W/m²] | No | Diffuse horizontal irradiance (reference only) | `DHI`, `diffuse_horizontal_irradiance`, `diffuse_solar` |
+| Temperature [°C] | No | Dry-bulb air temperature | `temp`, `temp_C`, `t2m`, `dry_bulb` |
+| Pressure [kPa/hPa] | No | Atmospheric pressure | `pressure`, `press_kPa`, `atmospheric_pressure` |
 
-Supported timestamp formats include `YYYY-MM-DD HH:MM:SS`, `DD/MM/YYYY HH:MM`, and ISO 8601 variants.
+Supported timestamp formats include `YYYY-MM-DD HH:MM:SS`, `YYYY/MM/DD @ HH:MM:SS`, `DD/MM/YYYY HH:MM`, and ISO 8601 variants.
 Columns with separate `year`, `month`, `day`, `hour` fields are also supported.
 
 A **downloadable template** (Excel + CSV) is available directly from the application sidebar.

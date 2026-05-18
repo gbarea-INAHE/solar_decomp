@@ -26,24 +26,30 @@ GHI_ALIASES = [
     r"^ghi$", r"^global_horizontal_irradiance$", r"^global.*horiz",
     r"^irradiancia.*global", r"^gh$", r"^g_h$", r"^ghi_w",
     r"^solar.*global", r"^swdown$", r"^ssrd$",          # ERA5 / WRF
+    r"^global.*solar", r"^global_solar",                 # plantilla v2
 ]
 DNI_ALIASES = [
     r"^dni$", r"^direct_normal_irradiance$", r"^direct.*normal",
     r"^irradiancia.*directa", r"^bn$", r"^dni_w", r"^beam$",
+    r"^normal.*solar", r"^normal_solar",                 # plantilla v2
 ]
 DHI_ALIASES = [
     r"^dhi$", r"^diffuse_horizontal_irradiance$", r"^diffuse.*horiz",
     r"^irradiancia.*difusa", r"^dh$", r"^d_h$", r"^dif$",
+    r"^diffuse.*solar", r"^diffuse_solar",               # plantilla v2
 ]
 TEMP_ALIASES = [
     r"^temp.*dry|^tdb$|^dry.*bulb|^temperatura|^temp_c|^air.*temp|^t2m$",
+    r"^dry_bulb",                                        # plantilla v2
 ]
 PRESSURE_ALIASES = [
     r"^pressure|^presion|^press_kpa|^p_kpa|^p_hpa|^sp$|^msl$",
+    r"^atmospheric.*pressure",                           # plantilla v2
 ]
 TIMESTAMP_ALIASES = [
     r"^timestamp|^datetime|^fecha|^time$|^date$|^dt$|^hora$",
     r"^date.*time|^time.*stamp",
+    r"^date_time$|^date/_time$",                         # plantilla v2 (Date/Time)
 ]
 
 
@@ -66,6 +72,9 @@ def _find_col(df: pd.DataFrame, patterns: list[str]) -> Optional[str]:
 _TS_FORMATS = [
     "%Y-%m-%d %H:%M:%S",
     "%Y-%m-%d %H:%M",
+    "%Y/%m/%d @ %H:%M:%S",   # plantilla v2: 2005/01/01 @ 00:00:00
+    "%Y/%m/%d %H:%M:%S",
+    "%Y/%m/%d %H:%M",
     "%d/%m/%Y %H:%M:%S",
     "%d/%m/%Y %H:%M",
     "%m/%d/%Y %H:%M:%S",
@@ -228,6 +237,8 @@ def load_file(
     ext = ""
     if isinstance(path_or_buffer, (str, Path)):
         ext = Path(path_or_buffer).suffix.lower()
+    elif hasattr(path_or_buffer, "name"):          # Streamlit UploadedFile
+        ext = Path(path_or_buffer.name).suffix.lower()
 
     if ext in (".xlsx", ".xls"):
         df = pd.read_excel(path_or_buffer, engine="openpyxl")

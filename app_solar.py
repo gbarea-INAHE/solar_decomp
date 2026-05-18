@@ -65,8 +65,9 @@ _DISCLAIMER = (
 # ─────────────────────────────────────────────────────────────────────────────
 # Logo INAHE
 # ─────────────────────────────────────────────────────────────────────────────
-_ROOT = Path(__file__).resolve().parent
-_LOGO_PATH = _ROOT / "assets" / "inahe_logo.jpg"
+_ROOT          = Path(__file__).resolve().parent
+_LOGO_PATH     = _ROOT / "assets" / "inahe_logo.jpg"
+_TEMPLATE_PATH = _ROOT / "assets" / "plantilla_datos_v2.xlsx"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Configuración de página
@@ -254,13 +255,18 @@ with st.sidebar:
     st.caption("Descarga el template con el formato requerido e instrucciones.")
     col_tmpl_a, col_tmpl_b = st.columns(2)
     with col_tmpl_a:
+        _tmpl_bytes = (
+            _TEMPLATE_PATH.read_bytes()
+            if _TEMPLATE_PATH.is_file()
+            else generate_template_excel()
+        )
         st.download_button(
             label="Template Excel",
-            data=generate_template_excel(),
-            file_name="solar_decomp_template.xlsx",
+            data=_tmpl_bytes,
+            file_name="plantilla_datos_v2.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
-            help="Excel con hoja de instrucciones + plantilla con filas de ejemplo",
+            help="Planilla con columnas: Date/Time, Global Solar Wh/m2, Normal Solar, Diffuse Solar, Temperatura, Presion",
         )
     with col_tmpl_b:
         st.download_button(

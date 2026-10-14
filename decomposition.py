@@ -2,7 +2,8 @@
 decomposition.py — Descomposición GHI → DNI + DHI.
 
 Modelos implementados:
-  1. DIRINT (Perez et al., 1992)       — modelo primario
+  1. DIRINT (Perez et al., 1992)       — modelo primario. Desde v1.1 usa pvlib.irradiance.dirint;
+     la tabla propia de v1.0.0 se conserva como dirint_series_v1 (solo para reproducir lo publicado).
   2. Erbs   (Erbs et al., 1982)        — modelo fallback / comparación
 
 Ambos retornan: DNI [W/m²], DHI [W/m²], metadata del modelo.
@@ -15,10 +16,12 @@ Referencias:
 from __future__ import annotations
 
 import math
+import warnings
 from typing import Optional
 
 import numpy as np
 import pandas as pd
+import pvlib
 
 from config import (
     AM_MAX, ZENITH_MAX_DEG, KT_CLOUD_ENH, KT_UNPHYSICAL,
@@ -199,9 +202,13 @@ def dirint_single(
     return dni, dhi, meta
 
 
-def dirint_series(df: pd.DataFrame, w_cm_series: Optional[pd.Series] = None, min_cosz: float = MIN_COSZ_DEFAULT) -> pd.DataFrame:
+def dirint_series_v1(df: pd.DataFrame, w_cm_series: Optional[pd.Series] = None, min_cosz: float = MIN_COSZ_DEFAULT) -> pd.DataFrame:
     """
-    Aplica DIRINT a todo el DataFrame horario.
+    LEGACY (v1.0.0). Aplica la tabla DIRINT propia de la v1.0.0 a todo el DataFrame horario.
+
+    ATENCIÓN: esta tabla NO es el DIRINT de Perez et al. (1992) tal como lo implementa pvlib (otra estructura de tabla,
+    ΔKt' solo hacia atrás, W con HR = 70 % fija) y sobreestima el DNI. Se conserva únicamente para reproducir los
+    resultados de la v1.0.0; usar dirint_series.
 
     Columnas requeridas en df:
       GHI_h, G0n, G0h, Kt, AM, temp_C (opcional), pressure_kPa (opcional)
@@ -293,6 +300,138 @@ def dirint_series(df: pd.DataFrame, w_cm_series: Optional[pd.Series] = None, min
     out["delta_Ktp"]    = dkt_arr
     out["W_cm"]         = w_arr
     out["flag_dirint"]  = flag_out
+    return out
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# DIRINT — Perez et al. (1992), vía pvlib.irradiance.dirint
+# ══════════════════════════════════════════════════════════════════════════════
+
+_REQUIRED_DIRINT = ("timestamp_center", "GHI_h", "G0n", "G0h", "Kt", "AM", "zenith_deg", "pressure_kPa")
+
+
+def _delta_ktp_bilateral(ktp, seg_id=None) -> np.ndarray:
+    """
+    ΔKt' de Perez et al. (1992, ec. 2-3): media de |Kt'_i − Kt'_{i−1}| y |Kt'_i − Kt'_{i+1}| sobre los vecinos válidos
+    (uno solo en los extremos o junto a un NaN). Es informativo: el DNI lo calcula pvlib con su propia ΔKt'.
+    """
+    ktp = np.asarray(ktp, dtype=float)
+    prev = np.full(len(ktp), np.nan)
+    nxt = np.full(len(ktp), np.nan)
+    prev[1:] = np.abs(ktp[1:] - ktp[:-1])
+    nxt[:-1] = np.abs(ktp[:-1] - ktp[1:])
+    if seg_id is not None:                    # los vecinos que no son la hora contigua (salto de tramo) no cuentan
+        seg_id = np.asarray(seg_id)
+        prev[1:][seg_id[1:] != seg_id[:-1]] = np.nan
+        nxt[:-1][seg_id[:-1] != seg_id[1:]] = np.nan
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        return np.nanmean(np.vstack([prev, nxt]), axis=0)
+
+
+def dirint_series(
+    df: pd.DataFrame,
+    w_cm_series: Optional[pd.Series] = None,
+    min_cosz: float = MIN_COSZ_DEFAULT,
+    max_zenith: float = ZENITH_MAX_DEG,
+    dew_point_C: Optional[np.ndarray] = None,
+) -> pd.DataFrame:
+    """
+    DIRINT de Perez et al. (1992), implementado con pvlib.irradiance.dirint (referencia abierta).
+
+    Columnas requeridas en df: timestamp_center, GHI_h, G0n, G0h, Kt, AM, zenith_deg, pressure_kPa.
+    La serie debe ser horaria, regular y SIN huecos (conservar las filas nocturnas): ΔKt' usa las dos horas vecinas.
+
+    Agua precipitable: Perez usa el punto de rocío (W = exp(0.07·Td − 0.075)). Se toma, en este orden, de
+    dew_point_C, de la columna dew_point_C de df, o de w_cm_series (se invierte la relación). Si no hay ninguno,
+    pvlib usa el bin de «agua precipitable desconocida» de Perez; NO se asume humedad relativa ni W por defecto.
+    Las horas individuales con punto de rocío NaN usan también ese bin (no se descartan).
+
+    Retorna df con DNI_dirint, DHI_dirint (por cierre), Kn_dirint, Ktp, delta_Ktp, W_cm, flag_dirint, dirint_version y
+    dirint_W_source («dew_point» o «unknown_bin» por hora: de dónde salió el agua precipitable).
+    OJO: dirint_series usa dew_point_C si la columna existe; run_decomposition la excluye salvo use_dew_point=True.
+    """
+    missing = [c for c in _REQUIRED_DIRINT if c not in df.columns]
+    if missing:
+        raise KeyError(f"dirint_series: faltan columnas {missing}")
+    n = len(df)
+    times = pd.DatetimeIndex(pd.to_datetime(df["timestamp_center"]))
+    # Tramos continuos: ΔKt' solo puede usar horas contiguas (paso de exactamente 1 h). Un TMY (meses de años distintos), horas faltantes o filas
+    # desordenadas parten la serie en tramos; cada tramo se pasa a pvlib por separado y ΔKt' no cruza el salto. Con n tramos > 1 se avisa.
+    brk = (times.to_series().diff() != pd.Timedelta(hours=1)).to_numpy().copy()     # copia: to_numpy() puede ser de solo lectura (pandas ≥ 3)
+    if n:
+        brk[0] = True
+    seg_id = np.cumsum(brk)
+    n_seg = int(seg_id[-1]) if n else 0
+    if n_seg > 1:
+        warnings.warn(f"dirint_series: la serie tiene {n_seg} tramos continuos de 1 h (p. ej. un TMY con meses de años distintos, o horas faltantes); "
+                      f"ΔKt' no cruza los saltos y se calcula por tramo", RuntimeWarning, stacklevel=2)
+
+    # ── Punto de rocío para pvlib ────────────────────────────────────────────
+    if dew_point_C is not None:
+        td = np.asarray(dew_point_C, dtype=float)
+    elif "dew_point_C" in df.columns:
+        td = df["dew_point_C"].to_numpy(float)
+    elif w_cm_series is not None:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            td = (np.log(np.asarray(w_cm_series, dtype=float)) + 0.075) / 0.07
+    else:
+        td = None
+    if td is not None and len(td) != n:
+        raise ValueError("dirint_series: el punto de rocío debe tener una fila por hora")
+
+    ghi = df["GHI_h"].to_numpy(float)
+    g0n = df["G0n"].to_numpy(float)
+    g0h = df["G0h"].to_numpy(float)
+    kt = df["Kt"].to_numpy(float)
+    am = df["AM"].to_numpy(float)
+    cosz = np.where(g0n > 0, g0h / np.where(g0n > 0, g0n, np.nan), 0.0)
+
+    zen_all = df["zenith_deg"].to_numpy(float)
+    pres_all = df["pressure_kPa"].to_numpy(float) * 1000.0
+
+    def _pv(temp_dew):
+        out = np.full(n, np.nan)
+        for sid in range(1, n_seg + 1):
+            sl = seg_id == sid
+            t = times[sl]
+            out[sl] = pvlib.irradiance.dirint(
+                ghi=pd.Series(ghi[sl], index=t), solar_zenith=pd.Series(zen_all[sl], index=t), times=t,
+                pressure=pd.Series(pres_all[sl], index=t), use_delta_kt_prime=True,
+                temp_dew=None if temp_dew is None else pd.Series(temp_dew[sl], index=t), min_cos_zenith=min_cosz, max_zenith=max_zenith,
+            ).to_numpy(float)
+        return out
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        dni = _pv(None)                       # bin de agua precipitable desconocida (Perez 1992)
+        if td is not None and np.isfinite(td).any():
+            # pvlib devuelve NaN en las horas con punto de rocío NaN (verificado con pvlib 0.16.1, aunque su docstring diga otra cosa):
+            # esas horas conservan el resultado del bin «desconocido»; solo las que tienen punto de rocío usan el agua precipitable.
+            dni_known = _pv(td)
+            dni = np.where(np.isfinite(td), dni_known, dni)
+
+    dni = np.where((g0h > 0) & (cosz >= min_cosz), dni, np.nan)      # de noche o con sol muy bajo: inválido (como v1)
+    dni = np.clip(dni, 0.0, DNI_MAX_W_M2)                            # np.clip conserva NaN
+    dhi = np.where(np.isfinite(dni), np.clip(ghi - dni * cosz, 0.0, None), np.nan)
+
+    ktp = np.array([_kt_prime(k, a) if (not math.isnan(k) and not math.isnan(a)) else float("nan") for k, a in zip(kt, am)])
+    flag = np.full(n, "invalid", dtype=object)
+    ok = np.isfinite(dni)
+    flag[ok & (kt > KT_UNPHYSICAL)] = "DIRINT_unphysical"
+    flag[ok & (kt > KT_CLOUD_ENH) & (kt <= KT_UNPHYSICAL)] = "DIRINT_cloudenh"
+    flag[ok & (kt <= KT_CLOUD_ENH)] = "DIRINT"
+
+    out = df.copy()
+    out["DNI_dirint"] = dni
+    out["DHI_dirint"] = dhi
+    out["Kn_dirint"] = np.where(g0n > 0, dni / np.where(g0n > 0, g0n, np.nan), np.nan)
+    out["Ktp"] = ktp
+    out["delta_Ktp"] = _delta_ktp_bilateral(ktp, seg_id)
+    out["W_cm"] = np.nan if td is None else np.exp(0.07 * td - 0.075)
+    out["dirint_W_source"] = "unknown_bin" if td is None else np.where(np.isfinite(td), "dew_point", "unknown_bin")
+    out["flag_dirint"] = flag
+    out["dirint_version"] = "perez1992_pvlib"
     return out
 
 
@@ -507,6 +646,8 @@ def run_decomposition(
     df_hourly: pd.DataFrame,
     primary: str = "DIRINT",
     min_cosz: float = MIN_COSZ_DEFAULT,
+    legacy_dirint: bool = False,
+    use_dew_point: bool = False,
 ) -> pd.DataFrame:
     """
     Ejecuta los tres modelos y selecciona el primario como columnas DNI/DHI.
@@ -516,13 +657,29 @@ def run_decomposition(
     df_hourly : DataFrame de preprocessor.aggregate_to_hourly
     primary   : "DIRINT", "Erbs" o "Reindl-2"
     min_cosz  : umbral mínimo de cos(Z) para considerar descomposición válida
+    legacy_dirint : True usa la tabla DIRINT de la v1.0.0 (NO es Perez 1992) solo para reproducir resultados publicados
+    use_dew_point : True hace que el DIRINT de Perez use el agua precipitable del punto de rocío (columna dew_point_C de
+                    df_hourly, que el preprocesador crea desde humedad relativa + temperatura o desde una columna de punto de
+                    rocío). Por defecto False: se usa el bin de «agua precipitable desconocida» de Perez, porque en el piloto con
+                    4 estaciones medidas usar el punto de rocío aumentó el RMSE de DNI en 3–5 W/m² (ver CHANGELOG).
+                    Si es True y no hay dew_point_C, falla con ValueError (no se sustituye en silencio).
 
     Retorna
     -------
     DataFrame con columnas DNI, DHI (del modelo primario) más
     DNI_dirint, DHI_dirint, DNI_erbs, DHI_erbs, DNI_reindl2, DHI_reindl2.
     """
-    df_d  = dirint_series(df_hourly, min_cosz=min_cosz)
+    if use_dew_point and legacy_dirint:
+        raise ValueError("use_dew_point no se aplica al DIRINT legacy de la v1.0.0 (usa su propia estimación de agua precipitable)")
+    if use_dew_point and "dew_point_C" not in df_hourly.columns:
+        raise ValueError("use_dew_point=True pero df_hourly no tiene la columna dew_point_C (el archivo no trae punto de rocío ni humedad + temperatura)")
+    if legacy_dirint:
+        df_d = dirint_series_v1(df_hourly, min_cosz=min_cosz)
+    else:
+        # por defecto el DIRINT NO usa dew_point_C aunque exista; la columna se conserva en la salida como dato
+        df_d = dirint_series(df_hourly if use_dew_point else df_hourly.drop(columns=["dew_point_C"], errors="ignore"), min_cosz=min_cosz)
+        if "dew_point_C" in df_hourly.columns:
+            df_d["dew_point_C"] = df_hourly["dew_point_C"].to_numpy()
     df_e  = erbs_series(df_hourly, min_cosz=min_cosz)
     df_r  = reindl2_series(df_hourly, min_cosz=min_cosz)
 

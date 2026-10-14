@@ -24,6 +24,7 @@ from plotly.subplots import make_subplots
 from io_handler import load_file, summarize_loaded
 from preprocessor import aggregate_to_hourly, preprocessing_summary
 from decomposition import run_decomposition
+from reference import consistency_table, hourly_reference
 from validator import validate
 from reporter import (
     build_quality_report,
@@ -35,91 +36,31 @@ from reporter import (
 # ─────────────────────────────────────────────────────────────────────────────
 # Constantes de autoría y citación
 # ─────────────────────────────────────────────────────────────────────────────
-_DOI     = "10.5281/zenodo.20262707"
+_DOI     = "10.5281/zenodo.20262706"
 _DOI_URL = f"https://doi.org/{_DOI}"
 
 _APA_CITATION = (
-    "Barea, G., & Ganem, C. (2025). *Solar Decomp: GHI to DNI+DHI solar irradiance "
+    "Barea, G., & Ganem, C. (2026).*Solar Decomp: GHI to DNI+DHI solar irradiance "
     f"decomposition* [Software]. INAHE-CONICET. Zenodo. {_DOI_URL}"
 )
 
-_BIBTEX_CITATION = f"""@software{{barea_ganem_2025_solar_decomp,
+_BIBTEX_CITATION = f"""@software{{barea_ganem_2026_solar_decomp,
   author    = {{Barea, Gustavo and Ganem, Carolina}},
   title     = {{Solar Decomp: GHI to DNI+DHI solar irradiance decomposition}},
-  year      = {{2025}},
+  year      = {{2026}},
   publisher = {{Zenodo}},
   doi       = {{{_DOI}}},
   url       = {{{_DOI_URL}}}
 }}"""
 
 _VALIDATION_MD = """
-**Sitio de referencia:** Córdoba, Argentina (lat −31.4°, lon −64.2°, alt 474 m, UTC−3)
-**Datos de referencia:** archivo TMY Córdoba — GHI, DNI y DHI medidos / modelados independientemente
-**Período:** año completo (8 760 h) · **N = 3 739 horas diurnas válidas** con DNI referencia > 0
+### Sobre los datos de referencia y esta versión
 
----
+**Qué mide una comparación con un archivo de referencia.** Si el archivo de referencia es un TMY (por ejemplo, un archivo IWEC2), su DNI y su DHI no son mediciones: se generan a partir de la GHI del propio archivo (en IWEC2, con una partición de tipo Gompertz). Comparar los modelos contra ese tipo de referencia mide **consistencia con la referencia**, no exactitud. Para evaluar la exactitud hacen falta mediciones independientes de DNI y DHI.
 
-### Estadísticas globales — DNI
+**Versión 1.1.0.** El modelo DIRINT es ahora el de Perez et al. (1992), a través de `pvlib`. La versión 1.0.0 usaba una tabla propia que no coincidía con la de Perez et al. (1992) y sobreestimaba la DNI; esa tabla se conserva en el código solo para reproducir resultados publicados con esa versión. Ver `CHANGELOG.md`.
 
-| Modelo | RMSE (W/m²) | MBE (W/m²) | R² | nRMSE (%) | Total anual (kWh/m²) |
-|--------|:-----------:|:----------:|:--:|:---------:|:--------------------:|
-| **Referencia** | — | — | — | — | **1 908** |
-| DIRINT | 146 | +93 ⚠ | 0.878 | 28.6 | 2 258 (+18 %) |
-| Erbs | 87 | −39 | 0.932 | 17.0 | 1 762 (−8 %) |
-| **Reindl-2** | **81** | −50 | **0.964** | **15.9** | 1 723 (−10 %) |
-
-### Estadísticas globales — DHI
-
-| Modelo | RMSE (W/m²) | MBE (W/m²) | R² | Total anual (kWh/m²) |
-|--------|:-----------:|:----------:|:--:|:--------------------:|
-| **Referencia** | — | — | — | **676** |
-| DIRINT | 58 | −40 | 0.877 | 523 (−23 %) |
-| **Erbs** | **39** | +9 | **0.926** | 706 (+4 %) |
-| Reindl-2 | 41 | +24 | 0.922 | 761 (+13 %) |
-
-> **nRMSE** = RMSE / media observada × 100. **MBE** positivo = sobreestimado; negativo = subestimado.
-
----
-
-### Error relativo mensual — DNI (%)
-
-| Mes | DNI ref (W/m²) | DIRINT | Erbs | Reindl-2 |
-|-----|:--------------:|:------:|:----:|:--------:|
-| Enero | 494 | +21 % | −5 % | −9 % |
-| Febrero | 473 | +20 % | −3 % | −7 % |
-| Marzo | 456 | +14 % | −6 % | −9 % |
-| Abril | 503 | +21 % | −10 % | −11 % |
-| Mayo | 480 | +25 % | −9 % | −8 % |
-| Junio | 558 | +25 % | −13 % | −11 % |
-| Julio | 494 | +20 % | −11 % | −9 % |
-| Agosto | 633 | +17 % | −12 % | −13 % |
-| Septiembre | 552 | +13 % | −10 % | −12 % |
-| Octubre | 452 | +18 % | −8 % | −11 % |
-| Noviembre | 463 | +14 % | −3 % | −9 % |
-| Diciembre | 583 | +16 % | −4 % | −9 % |
-
----
-
-### Interpretación por modelo
-
-**DIRINT** (Perez et al., 1992)
-Sobreestima DNI en +14 % a +25 % todos los meses (MBE anual +93 W/m², nRMSE 28.6 %).
-Causa: el modelo fue calibrado con climas templados de EE.UU. y Europa que presentan mayor variabilidad de nubosidad (ΔKt' alto). En climas de cielo claro persistente como el centro-oeste de Argentina, ΔKt' es sistemáticamente bajo, forzando a DIRINT hacia los bins de "baja variabilidad" que asignan valores Kn elevados. Resultado: sobreestimación estructural del componente directo. **No se recomienda como modelo primario para climas semiáridos y áridos del interior argentino.**
-
-**Erbs** (Erbs et al., 1982)
-Error relativo en DNI: −3 % a −13 % según el mes. Error en DHI prácticamente neutro a lo largo del año (MBE anual +9 W/m²). Es el modelo **más preciso para DHI** (RMSE 39 W/m², R² = 0.926). Adecuado para aplicaciones donde la irradiancia difusa es determinante: simulación de iluminación natural, diseño de envolventes, sistemas de concentración solar.
-
-**Reindl-2** (Reindl et al., 1990)
-Mejor correlación para DNI (R² = 0.964) y el menor nRMSE (15.9 %). Incluye el ángulo de elevación solar sin(α) como variable predictora, lo que mejora el desempeño para ángulos cenitales grandes (amanecer / atardecer) y latitudes altas. Tendencia a sobreestimar DHI (+7 % a +15 %). **Recomendado como modelo primario** para el clima continental semiárido de Argentina (Córdoba, Cuyo, NOA).
-
----
-
-### Conclusiones
-
-1. **La geometría solar** (Spencer, 1971; Cooper, 1969) reproduce el cos(Z) del archivo de referencia con RMSE = 0.005 (R² = 0.9999) al utilizar los parámetros correctos del sitio.
-2. **Erbs y Reindl-2** se encuentran dentro de los rangos publicados en la literatura especializada: RMSE_DNI = 80–90 W/m², R²_DNI > 0.93 (Besharat et al., 2013; Ineichen, 2008; Engerer & Mills, 2015).
-3. **DIRINT sobreestima sistemáticamente** en climas de cielo persistentemente claro, consistente con reportes previos de sesgo positivo en el hemisferio sur (Vindel & Polo, 2014).
-4. **Recomendación operativa:** usar **Reindl-2 como modelo primario** para sitios del interior argentino y **Erbs como verificación cruzada**. DIRINT puede utilizarse en climas con alta variabilidad de nubosidad (Buenos Aires, litoral, Patagonia costera).
+**Resultados de validación.** La validación con el archivo de Córdoba que figuraba en versiones anteriores se retiró: usaba la tabla anterior del DIRINT y una referencia que no es una medición. El artículo asociado y sus resultados se enlazarán aquí cuando estén publicados.
 
 ---
 
@@ -131,11 +72,6 @@ Mejor correlación para DNI (R² = 0.964) y el menor nRMSE (15.9 %). Incluye el 
 - Spencer, J.W. (1971). Fourier series representation of the position of the sun. *Search*, 2(5), 172.
 - Cooper, P.I. (1969). The absorption of radiation in solar stills. *Solar Energy*, 12(3), 333–346.
 - Kasten, F., & Young, A.T. (1989). Revised optical air mass tables and approximation formula. *Applied Optics*, 28(22), 4735–4738.
-- Besharat, F., Dehghan, A.A., & Faghih, A.R. (2013). Empirical models for estimating global solar radiation: A review and case study. *Renewable and Sustainable Energy Reviews*, 21, 798–821. https://doi.org/10.1016/j.rser.2012.12.043
-- Ineichen, P. (2008). Comparison and validation of three global-to-beam irradiance models against ground measurements. *Solar Energy*, 82(6), 501–512. https://doi.org/10.1016/j.solener.2007.12.006
-- Engerer, N.A., & Mills, F.P. (2015). Validating nine clear sky radiation models in Australia. *Solar Energy*, 120, 9–24. https://doi.org/10.1016/j.solener.2015.06.044
-- Vindel, J.M., & Polo, J. (2014). Intermittency and variability of solar irradiance and improvements in its modeling. *Solar Energy*, 107, 60–73. https://doi.org/10.1016/j.solener.2014.05.028
-- Leckner, B. (1978). The spectral distribution of solar radiation at the Earth's surface. *Solar Energy*, 20(2), 143–150.
 """
 
 _DISCLAIMER = (
@@ -188,7 +124,7 @@ st.divider()
 # ─────────────────────────────────────────────────────────────────────────────
 # Estado de sesión
 # ─────────────────────────────────────────────────────────────────────────────
-for key in ["loaded", "df_hourly", "df_result", "report", "site_info"]:
+for key in ["loaded", "df_hourly", "df_result", "report", "site_info", "ref_table"]:
     if key not in st.session_state:
         st.session_state[key] = None
 
@@ -368,9 +304,13 @@ with st.sidebar:
     # ── 1. Carga de archivo ───────────────────────────────────────────────────
     st.subheader("1 · Datos de entrada")
     uploaded = st.file_uploader(
-        "CSV o Excel (.xlsx)",
-        type=["csv", "xlsx", "xls"],
-        help="Columnas mínimas: timestamp + GHI. Soporta 1-min, 15-min y 60-min.",
+        "CSV, Excel (.xlsx) o EPW",
+        type=["csv", "xlsx", "xls", "epw"],
+        help=(
+            "CSV / Excel: columnas mínimas timestamp + GHI; soporta 1-min, 15-min y 60-min. "
+            "EPW: 1 registro por hora; se leen GHI, temperatura, presión (Pa), humedad y punto de rocío, "
+            "y el DNI / DHI del archivo se usan como referencia."
+        ),
     )
 
     if uploaded is not None and st.session_state.loaded is None:
@@ -386,17 +326,23 @@ with st.sidebar:
                 st.session_state.loaded = None
 
     if st.button("Resetear todo", use_container_width=True):
-        for k in ["loaded", "df_hourly", "df_result", "report", "site_info"]:
+        for k in ["loaded", "df_hourly", "df_result", "report", "site_info", "ref_table"]:
             st.session_state[k] = None
         st.rerun()
 
     # ── 2. Información del sitio ──────────────────────────────────────────────
     st.subheader("2 · Sitio")
-    lat = st.number_input("Latitud [°N]",        value=-34.6,  min_value=-90.0,  max_value=90.0,  step=0.01, format="%.4f")
-    lon = st.number_input("Longitud [°E]",        value=-58.4,  min_value=-180.0, max_value=180.0, step=0.01, format="%.4f")
-    alt = st.number_input("Altitud [m s.n.m.]",   value=25.0,   min_value=0.0,    max_value=5000.0, step=10.0, format="%.0f",
+    _ep = st.session_state.loaded.epw_meta if st.session_state.loaded is not None else None
+    if _ep:
+        st.info(
+            f"Sitio tomado del encabezado del EPW «{_ep['city']}» ({_ep['country']}). Revise los valores antes de ejecutar.",
+            icon="📍",
+        )
+    lat = st.number_input("Latitud [°N]",        value=(_ep["lat"] if _ep else -34.6),  min_value=-90.0,  max_value=90.0,  step=0.01, format="%.4f")
+    lon = st.number_input("Longitud [°E]",        value=(_ep["lon"] if _ep else -58.4),  min_value=-180.0, max_value=180.0, step=0.01, format="%.4f")
+    alt = st.number_input("Altitud [m s.n.m.]",   value=(min(max(_ep["elev"], 0.0), 5000.0) if _ep else 25.0),   min_value=0.0,    max_value=5000.0, step=10.0, format="%.0f",
                           help="Usada para estimar presión atmosférica cuando no hay datos medidos.")
-    tz  = st.number_input("Zona horaria [UTC+]",  value=-3.0,   min_value=-12.0,  max_value=14.0,  step=0.5,  format="%.1f")
+    tz  = st.number_input("Zona horaria [UTC+]",  value=(_ep["tz"] if _ep else -3.0),   min_value=-12.0,  max_value=14.0,  step=0.5,  format="%.1f")
 
     # ── 3. Modelos ────────────────────────────────────────────────────────────
     st.subheader("3 · Modelos")
@@ -406,15 +352,12 @@ with st.sidebar:
         icon="ℹ️",
     )
     st.markdown(
-        "- **Reindl-2** (Reindl et al., 1990): incorpora elevación solar sin(α). "
-        "Recomendado para climas áridos/semiáridos del interior argentino "
-        "(mejor R² = 0.964, nRMSE = 15.9 %).\n"
-        "- **Erbs** (Erbs et al., 1982): polinomio Kd(Kt). "
-        "Más preciso para DHI (RMSE = 39 W/m²). Robusto sin datos de temperatura.\n"
-        "- **DIRINT** (Perez et al., 1992): tabla 3D [W × ΔKt' × Kt']. "
-        "Mejor desempeño en climas variables con alta nubosidad "
-        "(Buenos Aires, litoral, Patagonia costera). "
-        "Tiende a sobreestimar DNI en cielos persistentemente claros."
+        "- **Reindl-2** (Reindl et al., 1990): incorpora la elevación solar sin(α).\n"
+        "- **Erbs** (Erbs et al., 1982): polinomio de la fracción difusa Kd en función de Kt. "
+        "No requiere temperatura ni humedad.\n"
+        "- **DIRINT** (Perez et al., 1992, vía pvlib): tabla de coeficientes con Kt', ángulo cenital, "
+        "ΔKt' y agua precipitable. Por defecto usa la clase de «agua precipitable desconocida»; "
+        "solo usa el punto de rocío si se activa la opción."
     )
     primary_model = "DIRINT"  # se calculan los 3; columnas DNI/DHI usan DIRINT por compatibilidad
 
@@ -428,12 +371,28 @@ with st.sidebar:
         ),
     )
 
+    _is_epw = st.session_state.loaded is not None and st.session_state.loaded.is_epw
     preserve_existing = st.checkbox(
         "No recalcular filas con DNI/DHI existentes",
-        value=True,
+        value=not _is_epw,
         help=(
             "Si el archivo ya contiene columnas DNI y/o DHI con datos, "
-            "se conservan esos valores y solo se calculan los faltantes."
+            "se conservan esos valores y solo se calculan los faltantes. "
+            "En un EPW está desactivado por defecto: su DNI / DHI son la referencia con la que se comparan los modelos."
+        ),
+    )
+
+    _ld_td = st.session_state.loaded
+    _td_possible = _ld_td is not None and bool(_ld_td.dewpoint_col or (_ld_td.humidity_col and _ld_td.temp_col))
+    use_dew_point = st.checkbox(
+        "Usar humedad / punto de rocío en el DIRINT",
+        value=False,
+        disabled=not _td_possible,
+        help=(
+            "Opcional. Por defecto el DIRINT usa el bin de «agua precipitable desconocida» de Perez et al. (1992). "
+            "Si el archivo trae humedad relativa (con temperatura) o punto de rocío, puede usarse para estimar el agua precipitable. "
+            "En una prueba con 4 estaciones medidas esto no redujo el error de DNI (lo aumentó entre 3 y 5 W/m²). "
+            "Se habilita solo si el archivo trae esos datos."
         ),
     )
 
@@ -466,11 +425,21 @@ if run_btn and st.session_state.loaded is not None:
 
     with st.spinner("Ejecutando modelos DIRINT + Erbs + Reindl-2…"):
         try:
-            df_dec = run_decomposition(df_hourly, primary=primary_model, min_cosz=min_cosz)
+            df_dec = run_decomposition(df_hourly, primary=primary_model, min_cosz=min_cosz, use_dew_point=use_dew_point)
         except Exception as e:
             st.error(f"Error en descomposicion: {e}")
             st.error(traceback.format_exc())
             st.stop()
+
+    # ── Consistencia con el DNI / DHI del archivo (antes de cualquier sobrescritura) ─────────────
+    ref_table = None
+    if ld.dni_col or ld.dhi_col:
+        try:
+            _r_dni, _r_dhi = hourly_reference(ld, df_dec["timestamp_start"])
+            ref_table = consistency_table(df_dec, _r_dni, _r_dhi)
+        except Exception as e:
+            st.warning(f"No se pudo calcular la consistencia con el DNI / DHI del archivo: {e}")
+    st.session_state.ref_table = ref_table
 
     # ── Preserve existing DNI/DHI ─────────────────────────────────────────────
     if preserve_existing and ld.dni_col and ld.dhi_col:
@@ -520,11 +489,11 @@ if st.session_state.loaded is None:
     # ── Pantalla de bienvenida ────────────────────────────────────────────────
     st.markdown("## ☀️ Solar Decomp — GHI → DNI + DHI")
     st.info(
-        "Carga un archivo CSV o Excel en el panel lateral para comenzar.\n\n"
+        "Carga un archivo CSV, Excel o EPW en el panel lateral para comenzar.\n\n"
         "**Columnas mínimas requeridas:**\n"
         "- Timestamp (cualquier nombre reconocible: `timestamp`, `datetime`, `fecha`, etc.)\n"
         "- GHI en W/m² (nombres reconocidos: `ghi`, `global_horizontal_irradiance`, `swdown`, etc.)\n\n"
-        "**Opcionales:** DNI, DHI (referencia), temperatura [°C], presión [kPa/hPa]\n\n"
+        "**Opcionales:** DNI, DHI (referencia), temperatura [°C], presión [kPa/hPa], humedad relativa [%] o punto de rocío [°C]\n\n"
         "**Resoluciones soportadas:** 1-min · 15-min · 60-min",
         icon="ℹ️",
     )
@@ -534,21 +503,24 @@ if st.session_state.loaded is None:
         st.markdown("### Modelos implementados")
         st.markdown("""
 **DIRINT** (Perez et al., 1992)
-- Tabla 3D: [W_precipitable × ΔKt' × Kt']
+- Tabla de coeficientes: Kt', ángulo cenital, ΔKt' y agua precipitable
 - Usa variabilidad horaria de Kt'
-- Modelo primario recomendado
+- Modelo primario por defecto
 
 **Erbs** (Erbs et al., 1982)
 - Polinomio Kd(Kt) por tramos
 - Sin requerimiento de T/P
 - Fallback / comparación
+
+**Reindl-2** (Reindl et al., 1990)
+- Incorpora la elevación solar sin(α)
         """)
     with col2:
         st.markdown("### Flujo de procesamiento")
         st.markdown("""
 1. **Carga** · Detección automática de columnas y resolución
-2. **Preproceso** · Agregación horaria + geometría solar (Yallop)
-3. **Descomposición** · DIRINT + Erbs en paralelo
+2. **Preproceso** · Agregación horaria + geometría solar (Spencer / Cooper)
+3. **Descomposición** · DIRINT, Erbs y Reindl-2 en paralelo
 4. **Validación** · Flags físicos + quality score (0–100)
 5. **Exportación** · CSV / Excel + reporte JSON
         """)
@@ -573,6 +545,8 @@ elif st.session_state.df_result is None:
     if summ["has_dhi"]:      detected_opt.append("DHI (referencia)")
     if summ["has_temp"]:     detected_opt.append("Temperatura")
     if summ["has_pressure"]: detected_opt.append("Presión")
+    if summ["has_dewpoint"]: detected_opt.append("Punto de rocío (uso opcional en el DIRINT)")
+    elif summ["has_humidity"]: detected_opt.append("Humedad relativa (se convierte a punto de rocío; uso opcional en el DIRINT)")
     if detected_opt:
         st.success("Columnas opcionales detectadas: " + ", ".join(detected_opt))
 
@@ -660,13 +634,11 @@ else:
         st.plotly_chart(fig_model_comparison(df), use_container_width=True)
 
         st.markdown(
-            "**Cuando elegir cada modelo:**\n\n"
-            "- **DIRINT**: mejor opcion para datos medidos con variabilidad nube/sol. "
-            "Usa tabla 3D que incorpora vapor de agua y variabilidad horaria de Kt'.\n"
-            "- **Erbs**: baseline simple y robusto. No requiere vapor de agua. "
-            "Recomendado cuando los datos son escasos o el clima es muy nublado (Kt < 0.4).\n"
-            "- **Reindl-2**: alternativa empirica que incorpora elevacion solar sin(alfa). "
-            "Util como segundo punto de comparacion con Erbs."
+            "**Que usa cada modelo:**\n\n"
+            "- **DIRINT**: tabla de coeficientes (Perez et al., 1992) con Kt', angulo cenital, "
+            "variabilidad horaria ΔKt' y agua precipitable.\n"
+            "- **Erbs**: formula que depende solo de Kt. No requiere agua precipitable.\n"
+            "- **Reindl-2**: incorpora la elevacion solar sin(alfa) ademas de Kt."
         )
 
     with tab4:
@@ -692,6 +664,27 @@ else:
             st.dataframe(qd_df, use_container_width=True, hide_index=True)
 
     st.divider()
+
+    # ── Consistencia con la referencia del archivo ───────────────────────────
+    _rt = st.session_state.ref_table
+    if _rt is not None and not _rt.empty:
+        st.subheader("Consistencia con el DNI / DHI del archivo")
+        st.caption(
+            "Cada modelo frente a las columnas DNI y DHI del archivo (media horaria), en las horas con GHI ≥ 10 W/m² y cos θz ≥ 0.20. "
+            "Mide la consistencia con esa referencia, no la exactitud: en un archivo IWEC2 el DNI es una partición de la GHI del propio archivo "
+            "y el DHI resulta por cierre, es decir, no son mediciones. MBE = modelo − referencia. Sin intervalos de confianza."
+        )
+        st.dataframe(
+            _rt.style.format({"RMSE": "{:.1f}", "MBE": "{:+.1f}", "nRMSE_pct": "{:.1f}", "R2": "{:.3f}"}, na_rep="—"),
+            use_container_width=True, hide_index=True,
+        )
+        st.download_button(
+            "⬇ Consistencia con la referencia (CSV)",
+            data=_rt.to_csv(index=False).encode("utf-8"),
+            file_name="solar_decomp_consistencia_referencia.csv",
+            mime="text/csv",
+        )
+        st.divider()
 
     # ── Exportar ──────────────────────────────────────────────────────────────
     st.subheader("Exportar resultados")
@@ -756,7 +749,7 @@ else:
 # ─────────────────────────────────────────────────────────────────────────────
 st.divider()
 
-with st.expander("Validacion cientifica del programa"):
+with st.expander("Sobre los datos de referencia y la versión 1.1.0"):
     st.markdown(_VALIDATION_MD)
 
 with st.expander("Como citar esta herramienta"):

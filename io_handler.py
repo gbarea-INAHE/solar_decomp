@@ -3,6 +3,7 @@ io_handler.py — Carga, detección de columnas y análisis de resolución tempo
 
 Soporta:
   - CSV / Excel (.xlsx, .xls)
+  - EPW (EnergyPlus Weather, 1 registro por hora; ver read_epw)
   - Detección automática de columna GHI (alias comunes)
   - Detección automática de timestamp (múltiples formatos)
   - Detección de resolución temporal: 1-min, 15-min, 60-min
@@ -10,6 +11,7 @@ Soporta:
 """
 from __future__ import annotations
 
+import io
 import re
 from pathlib import Path
 from typing import Optional
@@ -45,6 +47,12 @@ TEMP_ALIASES = [
 PRESSURE_ALIASES = [
     r"^pressure|^presion|^press_kpa|^p_kpa|^p_hpa|^sp$|^msl$",
     r"^atmospheric.*pressure",                           # plantilla v2
+]
+HUMIDITY_ALIASES = [
+    r"^rh$|^rh_|^relative.*humid|^humidity|^humedad|^hum_rel|^hr_pct|^hr_%",
+]
+DEWPOINT_ALIASES = [
+    r"^dew|^tdew|^t_dew|^td$|^td_|^temp.*dew|^punto.*roc",
 ]
 TIMESTAMP_ALIASES = [
     r"^timestamp|^datetime|^fecha|^time$|^date$|^dt$|^hora$",
@@ -189,6 +197,9 @@ class LoadedData:
         temp_col: Optional[str] = None,
         pressure_col: Optional[str] = None,
         warnings: Optional[list[str]] = None,
+        humidity_col: Optional[str] = None,
+        dewpoint_col: Optional[str] = None,
+        epw_meta: Optional[dict] = None,
     ):
         self.df = df
         self.timestamp_col = timestamp_col
@@ -198,7 +209,14 @@ class LoadedData:
         self.dhi_col = dhi_col
         self.temp_col = temp_col
         self.pressure_col = pressure_col
+        self.humidity_col = humidity_col
+        self.dewpoint_col = dewpoint_col
+        self.epw_meta = epw_meta                  # dict con el encabezado del EPW (None si el archivo no es EPW)
         self.warnings: list[str] = warnings or []
+
+    @property
+    def is_epw(self) -> bool:
+        return self.epw_meta is not None
 
     @property
     def resolution_label(self) -> str:
@@ -212,13 +230,116 @@ class LoadedData:
         )
 
 
+# ── Lector de EPW ───────────────────────────────────────────────────────────
+
+# Campos (base 0) del registro de datos EPW estándar de 35 columnas que usa la herramienta, y sus códigos de dato faltante
+_EPW_COLS = {
+    0: "year", 1: "month", 2: "day", 3: "hour", 6: "t_db", 7: "t_dew", 8: "rh", 9: "p_pa",
+    13: "ghi", 14: "dni", 15: "dhi",
+}
+_EPW_MISSING = {"ghi": 9999.0, "dni": 9999.0, "dhi": 9999.0, "t_db": 99.9, "t_dew": 99.9, "rh": 999.0, "p_pa": 999999.0}
+
+
+def _epw_text(path_or_buffer) -> tuple[str, str]:
+    """Devuelve (texto, nombre) de un EPW dado como ruta o como buffer (p. ej., el UploadedFile de Streamlit)."""
+    if isinstance(path_or_buffer, (str, Path)):
+        raw = Path(path_or_buffer).read_bytes()
+        name = Path(path_or_buffer).name
+    else:
+        name = getattr(path_or_buffer, "name", "archivo.epw")
+        if hasattr(path_or_buffer, "seek"):
+            path_or_buffer.seek(0)
+        raw = path_or_buffer.read()
+        if hasattr(path_or_buffer, "seek"):
+            path_or_buffer.seek(0)
+    if isinstance(raw, str):
+        return raw, name
+    try:
+        return raw.decode("utf-8"), name
+    except UnicodeDecodeError:
+        return raw.decode("latin-1"), name       # codificación original de los EPW
+
+
+def read_epw(path_or_buffer) -> tuple[dict, pd.DataFrame]:
+    """
+    Lee un archivo EPW (EnergyPlus Weather) con 1 registro por hora. Falla de forma explícita si no cumple el formato.
+
+    - La hora h (1..24) del EPW es el intervalo que TERMINA en h, en hora estándar local del huso del encabezado:
+      timestamp (inicio del intervalo) = fecha + (h − 1) horas.
+    - Los códigos de dato faltante del EPW (9999, 99.9, 999, 999999) pasan a NaN en los campos que se usan.
+    - Un EPW de tipo TMY toma cada mes de un año distinto: se conservan los años del archivo.
+
+    Returns:
+        (meta, df): meta = {file, city, state, country, source, wmo, lat, lon, tz, elev, n_rows, years};
+        df con las columnas timestamp, GHI, DNI, DHI, temp_C, pressure_Pa (unidad nativa del EPW), RH, dew_point_C.
+    Raises:
+        ValueError con un mensaje explícito ante cualquier incumplimiento del formato.
+    """
+    text, name = _epw_text(path_or_buffer)
+    lines = text.splitlines()
+    k = next((i for i, ln in enumerate(lines[:20]) if ln.strip().upper().startswith("DATA PERIODS")), None)
+    if k is None:
+        raise ValueError(f"{name}: no es un EPW válido (no se encontró la línea DATA PERIODS en el encabezado).")
+    loc = lines[0].split(",")
+    if loc[0].strip().upper() != "LOCATION" or len(loc) < 10:
+        raise ValueError(f"{name}: la primera línea no es un registro LOCATION válido: {lines[0][:80]!r}")
+    try:
+        lat, lon, tz, elev = (float(loc[i]) for i in (6, 7, 8, 9))
+    except ValueError:
+        raise ValueError(f"{name}: latitud, longitud, huso o elevación no numéricos en LOCATION: {lines[0][:80]!r}") from None
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180 and -12 <= tz <= 14):
+        raise ValueError(f"{name}: LOCATION fuera de rango (lat={lat}, lon={lon}, huso={tz}).")
+    dp = lines[k].split(",")
+    try:
+        steps = int(dp[2])
+    except (IndexError, ValueError):
+        raise ValueError(f"{name}: DATA PERIODS sin número de registros por hora: {lines[k][:80]!r}") from None
+    if steps != 1:
+        raise ValueError(f"{name}: el EPW tiene {steps} registros por hora; solo se admite 1 registro por hora.")
+    rows = [ln.split(",") for ln in lines[k + 1:] if ln.strip()]
+    if not rows:
+        raise ValueError(f"{name}: el EPW no tiene registros de datos.")
+    short = [i for i, r in enumerate(rows) if len(r) < 29]
+    if short:
+        raise ValueError(f"{name}: {len(short)} registros con menos de 29 campos (el primero, en la línea {k + 2 + short[0]}).")
+    d = pd.DataFrame({nm: [r[i] for r in rows] for i, nm in _EPW_COLS.items()})
+    try:
+        d = d.apply(pd.to_numeric, errors="raise")
+    except (ValueError, TypeError) as e:
+        raise ValueError(f"{name}: valores no numéricos en los campos de fecha o de datos: {e}") from None
+    for col, code in _EPW_MISSING.items():
+        d[col] = d[col].where(d[col] < code, np.nan)
+    if not d["hour"].between(1, 24).all():
+        raise ValueError(f"{name}: el campo hora debe estar entre 1 y 24.")
+    try:
+        date = pd.to_datetime(d[["year", "month", "day"]].astype(int), errors="raise")
+    except Exception as e:
+        raise ValueError(f"{name}: fechas inválidas (año, mes, día): {e}") from None
+    key = (d["month"] * 10000 + d["day"] * 100 + d["hour"]).to_numpy()
+    if not (np.diff(key) > 0).all():
+        raise ValueError(f"{name}: (mes, día, hora) no es estrictamente creciente; un EPW debe estar en orden de calendario.")
+    if d["ghi"].isna().all():
+        raise ValueError(f"{name}: no hay ningún valor válido de irradiancia global horizontal (GHI).")
+    out = pd.DataFrame({
+        "timestamp": date + pd.to_timedelta(d["hour"].astype(int) - 1, unit="h"),
+        "GHI": d["ghi"], "DNI": d["dni"], "DHI": d["dhi"],
+        "temp_C": d["t_db"], "pressure_Pa": d["p_pa"], "RH": d["rh"], "dew_point_C": d["t_dew"],
+    })
+    meta = {
+        "file": name, "city": loc[1].strip(), "state": loc[2].strip(), "country": loc[3].strip(),
+        "source": loc[4].strip(), "wmo": loc[5].strip(), "lat": lat, "lon": lon, "tz": tz, "elev": elev,
+        "n_rows": len(out), "years": sorted(int(y) for y in d["year"].unique()),
+    }
+    return meta, out
+
+
 def load_file(
     path_or_buffer,
     timestamp_col: Optional[str] = None,
     ghi_col: Optional[str] = None,
 ) -> LoadedData:
     """
-    Carga un CSV o Excel y detecta automáticamente columnas y resolución.
+    Carga un CSV, Excel o EPW y detecta automáticamente columnas y resolución.
 
     Args:
         path_or_buffer : ruta (str/Path) o buffer de bytes (para Streamlit).
@@ -240,11 +361,25 @@ def load_file(
     elif hasattr(path_or_buffer, "name"):          # Streamlit UploadedFile
         ext = Path(path_or_buffer.name).suffix.lower()
 
-    if ext in (".xlsx", ".xls"):
-        df = pd.read_excel(path_or_buffer, engine="openpyxl")
+    epw_meta = None
+    if ext == ".epw":
+        epw_meta, df = read_epw(path_or_buffer)
+        warnings_list.append(
+            f"EPW «{epw_meta['city']}» ({epw_meta['country']}): lat={epw_meta['lat']:.4f}, lon={epw_meta['lon']:.4f}, "
+            f"huso UTC{epw_meta['tz']:+.1f}, elevación {epw_meta['elev']:.0f} m (leídos del encabezado)."
+        )
+        if len(epw_meta["years"]) > 1:
+            warnings_list.append(
+                f"El EPW toma sus meses de años distintos ({epw_meta['years'][0]}–{epw_meta['years'][-1]}, típico de un TMY): "
+                "se conservan los años del archivo, las filas quedan en orden cronológico y el DIRINT se calcula por tramos continuos."
+            )
+        if epw_meta["n_rows"] not in (8760, 8784):
+            warnings_list.append(f"El EPW tiene {epw_meta['n_rows']} registros (se esperaban 8760 u 8784).")
+    elif ext in (".xlsx", ".xls"):
+        df = _read_excel_template_aware(path_or_buffer)
     else:
-        # CSV: intentar inferir separador
-        df = _read_csv_robust(path_or_buffer)
+        # CSV: ignorar líneas de comentario iniciales (#) e inferir separador
+        df = _read_csv_robust(_skip_leading_comment_lines(path_or_buffer))
 
     if df.empty:
         raise ValueError("El archivo está vacío o no contiene datos.")
@@ -293,6 +428,8 @@ def load_file(
     dhi_col  = _find_col(df, DHI_ALIASES)
     temp_col = _find_col(df, TEMP_ALIASES)
     pres_col = _find_col(df, PRESSURE_ALIASES)
+    hum_col  = _find_col(df, HUMIDITY_ALIASES)
+    dew_col  = _find_col(df, DEWPOINT_ALIASES)
 
     # ── Limpiar GHI: coerce numérico, NaN explícito ───────────────────────────
     df[ghi_col] = pd.to_numeric(df[ghi_col], errors="coerce")
@@ -321,7 +458,46 @@ def load_file(
         temp_col=temp_col,
         pressure_col=pres_col,
         warnings=warnings_list,
+        humidity_col=hum_col,
+        dewpoint_col=dew_col,
+        epw_meta=epw_meta,
     )
+
+
+def _skip_leading_comment_lines(path_or_buffer):
+    """
+    Si el CSV empieza con líneas de comentario (las que comienzan con '#', como las de la plantilla descargable),
+    devuelve un buffer de texto sin esas líneas iniciales. Si no empieza con '#', devuelve el objeto original sin cambios.
+    Solo se ignoran las líneas iniciales: un '#' dentro de los datos no se toca.
+    """
+    if isinstance(path_or_buffer, (str, Path)):
+        with open(path_or_buffer, "rb") as f:
+            raw = f.read()
+        seekable = False
+    else:
+        raw = path_or_buffer.read()
+        seekable = hasattr(path_or_buffer, "seek")
+        if seekable:
+            path_or_buffer.seek(0)
+        if isinstance(raw, str):
+            raw = raw.encode("utf-8")
+    if not raw.lstrip(b"\xef\xbb\xbf \t\r\n").startswith(b"#"):
+        return path_or_buffer
+    lines = raw.decode("utf-8-sig", errors="replace").splitlines(keepends=True)
+    i = 0
+    while i < len(lines) and (lines[i].strip() == "" or lines[i].lstrip().startswith("#")):
+        i += 1
+    return io.StringIO("".join(lines[i:]))
+
+
+def _read_excel_template_aware(path_or_buffer) -> pd.DataFrame:
+    """
+    Lee un Excel. Si el libro tiene una hoja llamada «Plantilla» (la plantilla descargable trae primero «Instrucciones»),
+    lee esa hoja; en cualquier otro caso lee la primera hoja, como antes.
+    """
+    xl = pd.ExcelFile(path_or_buffer, engine="openpyxl")
+    sheet = next((n for n in xl.sheet_names if str(n).strip().lower() == "plantilla"), xl.sheet_names[0])
+    return xl.parse(sheet)
 
 
 def _read_csv_robust(path_or_buffer) -> pd.DataFrame:
@@ -374,5 +550,7 @@ def summarize_loaded(ld: LoadedData) -> dict:
         "has_dhi":         ld.dhi_col is not None,
         "has_temp":        ld.temp_col is not None,
         "has_pressure":    ld.pressure_col is not None,
+        "has_humidity":    ld.humidity_col is not None,
+        "has_dewpoint":    ld.dewpoint_col is not None,
         "warnings":        ld.warnings,
     }

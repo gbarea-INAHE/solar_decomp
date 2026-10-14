@@ -5,10 +5,11 @@ title: "Solar Decomp: GHI to DNI+DHI solar irradiance decomposition"
 abstract: >
   Solar Decomp is an open-source web application for decomposing global
   horizontal irradiance (GHI) into direct normal irradiance (DNI) and
-  diffuse horizontal irradiance (DHI) using the DIRINT (Perez et al., 1992)
-  and Erbs (Erbs et al., 1982) models. It supports 1-min, 15-min and
-  60-min time-series data, includes a physical quality-control system,
-  and exports results in CSV, Excel and JSON formats.
+  diffuse horizontal irradiance (DHI) using the DIRINT (Perez et al., 1992),
+  Erbs (Erbs et al., 1982) and Reindl-2 (Reindl et al., 1990) models. It
+  reads CSV, Excel and EPW files with 1-min, 15-min or 60-min data,
+  includes a physical quality-control system, and exports results in CSV,
+  Excel and JSON formats.
 authors:
   - family-names: Barea
     given-names: Gustavo
@@ -17,11 +18,12 @@ authors:
   - family-names: Ganem
     given-names: Carolina
     affiliation: "Instituto de Ambiente, Hábitat y Energía (INAHE) — CONICET, Argentina"
-doi: "10.5281/zenodo.20262707"
+doi: "10.5281/zenodo.20262706"
 repository-code: "https://github.com/gbarea-INAHE/solar_decomp"
 license: MIT
-version: "1.0.1"
-date-released: "2025-05-17"
+version: "1.1.0"
+# date-released: completar al publicar la versión (YYYY-MM-DD); la fecha anterior (2026-05-17) era la de la v1.0.1.
+# doi: DOI del concepto de Zenodo (cubre todas las versiones); cada versión, incluida la 1.1.0, tiene además su propio DOI de versión, que Zenodo asigna al publicar.
 keywords:
   - solar irradiance
   - GHI decomposition
@@ -34,7 +36,7 @@ keywords:
   - climate data
 references:
   - type: article
-    title: "Modeling daylight availability and irradiance components from direct and global irradiance"
+    title: "Dynamic global-to-direct irradiance conversion models"
     authors:
       - family-names: Perez
         given-names: R.
@@ -46,6 +48,23 @@ references:
         given-names: R.
       - family-names: Zelenka
         given-names: A.
+    journal: "ASHRAE Transactions - Research Series"
+    start: 354
+    end: 369
+    year: 1992
+  - type: article
+    title: "Modeling daylight availability and irradiance components from direct and global irradiance"
+    authors:
+      - family-names: Perez
+        given-names: R.
+      - family-names: Ineichen
+        given-names: P.
+      - family-names: Seals
+        given-names: R.
+      - family-names: Michalsky
+        given-names: J.
+      - family-names: Stewart
+        given-names: R.
     journal: "Solar Energy"
     volume: 44
     issue: 5

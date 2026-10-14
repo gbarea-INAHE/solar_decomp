@@ -85,6 +85,33 @@ def precipitable_water_cm(temp_C: float, pressure_kPa: float) -> float:
     return max(0.1, W)
 
 
+# Coeficientes de Magnus (A [hPa], B, C [°C]) recomendados por la OMM para vapor sobre agua líquida, válidos de −45 a +60 °C
+# (WMO-No. 8, Guide to Instruments and Methods of Observation, 2023; aproximación: Alduchov y Eskridge 1996, J. Appl. Meteorol. 35(4), 601–609).
+_MAGNUS_B = 17.62
+_MAGNUS_C = 243.12
+DEW_POINT_T_RANGE_C = (-45.0, 60.0)
+
+
+def dew_point_from_rh(temp_C, rh_percent) -> np.ndarray:
+    """
+    Temperatura de punto de rocío [°C] a partir de temperatura de bulbo seco [°C] y humedad relativa [%] (ecuación de Magnus).
+
+    Es vectorizada y NO inventa valores: devuelve NaN si falta algún dato, si la temperatura está fuera de −45…60 °C
+    (rango de validez de los coeficientes) o si la humedad no está en (0, 100]. No recorta ni redondea las entradas.
+    """
+    t = np.asarray(temp_C, dtype=float)
+    rh = np.asarray(rh_percent, dtype=float)
+    valid = (
+        np.isfinite(t) & np.isfinite(rh)
+        & (t >= DEW_POINT_T_RANGE_C[0]) & (t <= DEW_POINT_T_RANGE_C[1])
+        & (rh > 0.0) & (rh <= 100.0)
+    )
+    with np.errstate(invalid="ignore", divide="ignore"):
+        g = _MAGNUS_B * t / (_MAGNUS_C + t) + np.log(rh / 100.0)
+        td = _MAGNUS_C * g / (_MAGNUS_B - g)
+    return np.where(valid, td, np.nan)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # GEOMETRÍA VECTORIZADA — Spencer (1971) / Cooper (1969)
 # ══════════════════════════════════════════════════════════════════════════════

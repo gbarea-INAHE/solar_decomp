@@ -1,0 +1,37 @@
+# Cambios (borrador, SIN publicar)
+
+## 1.1.0 (sin fecha: se completa al publicar)
+### Corrección
+- `dirint_series` ahora implementa el DIRINT de Perez et al. (1992) con `pvlib.irradiance.dirint`.
+- El DIRINT de la v1.0.0 (tabla propia; NO es Perez 1992) se conserva como `dirint_series_v1`; `run_decomposition(..., legacy_dirint=True)` lo usa solo para reproducir resultados publicados con la v1.0.0.
+- Series con saltos de tiempo (un **TMY con meses de años distintos**, horas faltantes o filas desordenadas): el DIRINT las parte en **tramos continuos de 1 h**, calcula cada tramo por separado (ΔKt′ no cruza el salto) y avisa con un `RuntimeWarning`. Antes de esta corrección el DIRINT nuevo fallaba con esos archivos, que son el uso principal (TMY/EPW); se detectó al comparar con el benchmark de 41 archivos. En un TMY los saltos caen en horas nocturnas, así que el resultado diurno es igual al de pasar la serie entera a pvlib.
+- Nueva dependencia: `pvlib>=0.10` (probado con 0.16.1).
+- Las columnas de salida no cambian; se agrega `dirint_version`.
+
+- **Presión atmosférica: unidad mal interpretada (defecto de la v1.0.x).** La columna de presión se convertía así: mediana > 200 → Pa; mediana > 10 → «hPa» (÷ 10). Resultado: una columna en **kPa** (101.3, la unidad de las plantillas Excel y CSV y de `test_data_15min.csv`) se dividía por 10 y se usaba como **10.13 kPa**, y una en hPa (1013) se dividía por 1000; solo Pa quedaba bien. Ahora la unidad (Pa, hPa o kPa) se infiere por la magnitud de la mediana, se informa en los avisos y, si la mediana no corresponde a una presión de superficie plausible (30–110 kPa), la herramienta se detiene con un error. **Alcance:** en la v1.0.x la presión solo se mostraba en la columna de salida `pressure_kPa` (con el valor erróneo); el DIRINT de la tabla propia, Erbs y Reindl-2 no la usan, así que los resultados de DNI y DHI de la v1.0.x no cambian por este defecto (con `legacy_dirint=True` la salida es idéntica columna a columna salvo `pressure_kPa`, verificado con `test_data_15min.csv`). El defecto sí habría afectado al DIRINT de Perez de la v1.1.0, que usa la presión para la masa de aire absoluta. Erbs y Reindl-2 no cambian. Prueba nueva: `test_pressure_units.py`.
+
+### Nuevo
+- **Humedad relativa y punto de rocío como entradas opcionales.** Se detectan columnas de humedad relativa (`RH`, `relative_humidity`, `humedad`…, en %) y de punto de rocío (`dew_point`, `Tdew`, `punto_de_rocio`…, en °C). Con humedad y temperatura se calcula el punto de rocío por muestra con la ecuación de Magnus (coeficientes de la OMM, válidos −45…60 °C; verificada contra `pvlib.atmosphere.tdew_from_rh` y contra una inversión independiente de la fórmula de Buck) y se promedia por hora en la columna `dew_point_C`. Si el archivo trae punto de rocío, ese tiene prioridad.
+- **Opcional, apagado por defecto:** `run_decomposition(..., use_dew_point=True)` (casilla «Usar humedad / punto de rocío en el DIRINT» en la app, habilitada solo si el archivo trae esos datos) hace que el DIRINT use `dew_point_C` para el agua precipitable (W = exp(0.07·Td − 0.075), Perez 1992). Por defecto, y en las horas con dato inválido, usa el bin de «agua precipitable desconocida» de Perez; **no se asume humedad ni agua precipitable por defecto**. Con `use_dew_point=True` y sin dato falla con `ValueError`. La columna `dew_point_C` se conserva en la salida como dato y `dirint_W_source` indica por hora de dónde salió el agua precipitable (`dew_point` o `unknown_bin`).
+- Muestras con humedad fuera de (0, 100] % o temperatura fuera de −45…60 °C quedan NaN y se avisa; humedad en fracción (0–1) no se usa y se avisa.
+- El DIRINT legacy no cambia con el punto de rocío.
+
+- **Lectura de archivos EPW** (`.epw`, 1 registro por hora): `io_handler.read_epw` y `load_file` leen GHI, temperatura, presión (Pa), humedad relativa y punto de rocío de los registros, y latitud, longitud, huso y elevación del encabezado `LOCATION` (la app los usa como valores iniciales del sitio). La hora *h* (1–24) es el intervalo que termina en *h*: el inicio del intervalo es fecha + (*h* − 1) h. Los códigos de dato faltante (9999, 99.9, 999, 999999) pasan a NaN. En un TMY se conservan los años del archivo (aviso). Falla con mensaje explícito ante un EPW inválido. Pruebas: `test_epw_loader.py` (EPW sintéticos, no se distribuye ningún EPW real).
+- **Consistencia con el DNI / DHI del archivo** (`reference.py`, nueva tabla en la app y descarga en CSV): para cada modelo, n, RMSE, MBE (modelo − referencia), nRMSE y R² frente a las columnas DNI y DHI del archivo (media horaria), en las horas con GHI ≥ 10 W/m² y cos θz ≥ 0.20. Es consistencia con esa referencia, no exactitud, salvo que la referencia sea una medición. Sin intervalos de confianza. Pruebas: `test_reference_consistency.py`.
+- En un EPW la casilla «No recalcular filas con DNI/DHI existentes» queda **desactivada por defecto** (su DNI / DHI son la referencia, no valores a conservar). Con CSV / Excel el comportamiento no cambia.
+- Requisito de Python: 3.11 o superior (probado con 3.14 y las versiones de las dependencias indicadas en el README; no se probó con versiones anteriores de Python).
+
+### Nota de validación (piloto con 4 estaciones medidas, dominio c20; provisoria)
+- Con punto de rocío el DIRINT de Perez **no redujo** el RMSE de DNI frente al bin de «agua precipitable desconocida»: +3.9 (Petrolina), +3.3 (São Martinho), +5.2 (Desert Rock) y +5.4 W/m² (Golden), con intervalos 95 % por bootstrap de días que no incluyen 0. Es decir, usar el punto de rocío hace que el modelo use todos sus predictores (como en Perez 1992), pero en estos 4 sitios no mejoró la exactitud; por eso está apagado por defecto. Ver `data/processed/dirint_dewpoint_anchor.csv` en el paquete de revisión.
+
+### Textos (app, README y hoja de instrucciones)
+- Se retiró la «validación» con el archivo de Córdoba y las recomendaciones de modelo: el DNI/DHI de un TMY (p. ej. IWEC2) no son mediciones, así que una comparación contra ellos mide consistencia con la referencia, no exactitud. Las descripciones de los modelos pasan a decir qué usa cada uno.
+- Correcciones de hecho: geometría solar = Spencer / Cooper (no Yallop); la app calcula tres modelos; «modelo primario por defecto» (no «recomendado»); humedad relativa y punto de rocío figuran entre las columnas opcionales; la sección del DIRINT del README describe el modelo de Perez et al. (1992) y no la tabla de la v1.0.0.
+- Nombre de la columna de temperatura: las plantillas (CSV y Excel) usaban `temp`, que no se reconoce (el código acepta `temp_C`, `t2m`, `temperatura`, `dry_bulb`, …); las plantillas pasan a `temp_C` y el README lo aclara. No cambia la detección de columnas.
+
+### Cargador de archivos
+- Las plantillas descargables (CSV y Excel) ahora **se cargan tal cual**: el CSV puede empezar con líneas de comentario (`#`), que se ignoran (solo las iniciales; un `#` dentro de los datos no se toca), y de un Excel con una hoja llamada «Plantilla» se lee esa hoja (la plantilla trae primero «Instrucciones»). Sin comentarios iniciales ni hoja «Plantilla» el comportamiento es el de antes. Prueba nueva: `test_loader_templates.py`.
+
+### Metadatos
+- `CITATION.cff`: versión 1.1.0; se quitó la fecha de la 1.0.1 (completar al publicar); se corrigieron los autores de la referencia Perez et al. (1990) y se agregó Perez et al. (1992).
+- Pruebas nuevas: `test_dirint_perez1992.py`, `test_dewpoint_humidity.py`.

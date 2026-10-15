@@ -165,6 +165,8 @@ If you use Solar Decomp in your research, please cite:
 
 See also [`CITATION.cff`](CITATION.cff) for the machine-readable citation file.
 
+**Analysis scripts and data.** The scripts and derived data of the consistency study that uses this tool (IWEC2 weather files and ground measurements) are in a separate repository, [solar_decomp_analysis](https://github.com/gbarea-INAHE/solar_decomp_analysis) (DOI [10.5281/zenodo.23405259](https://doi.org/10.5281/zenodo.23405259); all versions: [10.5281/zenodo.23405258](https://doi.org/10.5281/zenodo.23405258)).
+
 ---
 
 ## References
